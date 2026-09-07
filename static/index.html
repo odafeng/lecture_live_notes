@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#f7f7f2" />
+  <title>Lecture — 課堂筆記工作台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232d5144'/%3E%3Cpath d='M9 8h14v17H9zM13 8v17M16 13h4M16 17h4' fill='none' stroke='%23f7f7f2' stroke-width='1.5'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/app.js" defer></script>
+</head>
+<body data-phase="idle">
+  <a class="skip-link" href="#main">跳到課堂工作台</a>
+  <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 3.5h14v17H5zM9 3.5v17M12 8h4M12 12h4"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2L2.9 9.6l6.3-.9Z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-lines" viewBox="0 0 24 24"><path d="M4 6h16M4 12h12M4 18h15"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="M3 10v4M7.5 6v12M12 3v18M16.5 7v10M21 10v4"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="課程設定">
+      <a class="brand" href="#main" aria-label="Lecture 課堂筆記工作台">
+        <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
+        <span><strong>lecture<span class="brand-period">.</span></strong><small>把課堂，留在筆記裡。</small></span>
+      </a>
+
+      <div class="sidebar-heading"><span class="eyebrow">YOUR CLASSROOM</span><span class="tiny-dot"></span></div>
+      <details id="courseSettings" class="course-settings" open>
+        <summary><span>課程設定</span><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+        <div class="settings-body">
+          <div class="field">
+            <label for="courseTitle">課程名稱 <span>選填</span></label>
+            <input id="courseTitle" placeholder="這堂課，想記下什麼？" maxlength="200" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="transcriptionMode">逐字稿風格</label>
+            <div class="select-wrap">
+              <select id="transcriptionMode" aria-describedby="modeHelp">
+                <option value="SMART" selected>精簡語句 · SMART</option>
+                <option value="VERBATIM">保留原話 · VERBATIM</option>
+              </select>
+              <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+            </div>
+            <p id="modeHelp" class="field-help">省略口頭贅詞，讓內容更好讀。</p>
+          </div>
+          <div class="field">
+            <label for="customVocabulary">專有名詞 <span>選填</span></label>
+            <textarea id="customVocabulary" rows="4" placeholder="例如：PyTorch, ResNet,&#10;backpropagation" aria-describedby="vocabularyHelp"></textarea>
+            <p id="vocabularyHelp" class="field-help">用逗號或換行分隔，幫助辨識課堂中的重要詞彙。</p>
+          </div>
+        </div>
+      </details>
+
+      <div class="sidebar-tip">
+        <span class="tip-icon"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg></span>
+        <h2>重要的那一句，留個記號。</h2>
+        <p>老師說到重點時，按下「標記重點」，就能在筆記留下時間標記。</p>
+      </div>
+      <div class="sidebar-footer"><span class="footer-rule"></span><span>聆聽 · 記錄 · 理解</span><small>A LITTLE MORE PRESENT.</small></div>
+    </aside>
+
+    <main id="main" class="main-content" tabindex="-1">
+      <header class="workspace-header">
+        <div><div class="eyebrow">LECTURE WORKSPACE</div><h1 id="workspaceTitle">今天，專心上課。</h1><p id="workspaceSubtitle">從第一句話，到一份值得重讀的筆記。</p></div>
+        <div class="header-meta"><span class="session-tag"><span class="tiny-dot"></span> 課堂工作台</span><time id="todayDate"></time></div>
+      </header>
+
+      <section class="recording-bar" aria-label="錄音控制">
+        <div class="timer-group"><span class="control-label"><span id="recordingDot" class="recording-dot"></span>錄音時間</span><span id="timer" class="timer">00:00:00</span></div>
+        <div class="recording-state"><span id="status" role="status" aria-live="polite">一切就緒，隨時開始</span><div class="audio-feedback"><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg><span id="audioLabel">麥克風尚未啟用</span><div id="audioMeter" class="audio-meter" role="meter" aria-label="麥克風音量" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div></div></div>
+        <div class="actions">
+          <button id="markBtn" class="button button-quiet" aria-label="標記重點" disabled><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg><span>標記重點</span></button>
+          <button id="startBtn" class="button button-primary"><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg><span id="startLabel">開始上課</span></button>
+          <button id="stopBtn" class="button button-stop" hidden><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg><span>下課／停止</span></button>
+        </div>
+      </section>
+      <div id="notice" class="notice" role="alert" hidden><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span id="noticeText"></span></div>
+
+      <div class="work-area" id="workArea" data-view="transcript">
+        <div class="reading-toolbar">
+          <div class="section-label"><span class="tiny-dot"></span> 這堂課的記錄</div>
+          <div class="mobile-switch" role="group" aria-label="切換閱讀內容"><button id="transcriptViewBtn" aria-pressed="true" aria-controls="transcriptPanel">逐字稿</button><button id="notesViewBtn" aria-pressed="false" aria-controls="notesPanel">課堂筆記</button></div>
+          <button id="followBtn" class="follow-button" aria-pressed="true"><span class="switch-track"><span></span></span>自動捲動</button>
+        </div>
+        <div class="workspace-grid">
+          <section id="transcriptPanel" class="panel transcript-panel" aria-labelledby="transcriptHeading">
+            <header class="panel-header"><div><span class="panel-number">01</span><h2 id="transcriptHeading">即時逐字稿</h2></div><span id="transcriptCount" class="count-badge">0 段</span></header>
+            <div id="transcriptScroll" class="panel-body" tabindex="0" aria-label="逐字稿閱讀區">
+              <div id="transcriptEmpty" class="empty-state">
+                <div class="empty-illustration sound-illustration" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                <h3>每一句，都有跡可循。</h3><p>開始上課後，說話的內容<br>會即時出現在這裡。</p><span class="empty-caption">跟上聲音，也留住思路。</span>
+              </div>
+              <div id="transcript"></div>
+              <div id="interim" class="interim" hidden></div>
+            </div>
+            <footer class="panel-footer"><svg class="icon" aria-hidden="true"><use href="#i-sound"/></svg><span>支援中英文混合辨識</span></footer>
+          </section>
+          <section id="notesPanel" class="panel notes-panel" aria-labelledby="notesHeading">
+            <header class="panel-header"><div><span class="panel-number">02</span><h2 id="notesHeading">即時課堂筆記</h2></div><span id="noteCount" class="count-badge">0 段筆記</span></header>
+            <div id="notesScroll" class="panel-body" tabindex="0" aria-label="課堂筆記閱讀區">
+              <div id="notesEmpty" class="empty-state">
+                <div class="empty-illustration paper-illustration" aria-hidden="true"><span class="paper-back"></span><span class="paper-front"><i></i><i></i><i></i><i></i></span><span class="paper-star">✦</span></div>
+                <h3>讓零散的話，長成重點。</h3><p>累積一段逐字稿後，<br>自動整理概念、定義與重要細節。</p><span class="empty-caption">你負責聆聽，筆記慢慢成形。</span>
+              </div>
+              <div id="notes"></div>
+            </div>
+            <footer class="panel-footer"><svg class="icon" aria-hidden="true"><use href="#i-lines"/></svg><span>分段整理 · 繁體中文輸出</span></footer>
+          </section>
+        </div>
+      </div>
+      <p class="workspace-footnote"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg><span>下課後，會將這堂課的內容整理成完整筆記。</span></p>
+
+      <section id="finalPanel" class="final-panel" aria-labelledby="finalHeading" hidden>
+        <header class="final-header"><div><span class="eyebrow">READY TO REVISIT</span><h2 id="finalHeading">把這堂課，好好收起來。</h2><p>重讀重點，也保留每一份課堂記錄。</p></div><span id="savedBadge" class="saved-badge" hidden><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>已儲存</span></header>
+        <div class="final-layout"><article class="final-document"><div class="document-kicker">CLASS NOTES <span>課堂完整筆記</span></div><div id="final" class="markdown"></div></article><aside class="downloads-panel" aria-labelledby="downloadHeading"><svg class="icon download-heading-icon"><use href="#i-download"/></svg><h3 id="downloadHeading">帶走這堂課</h3><p>下載檔案，隨時回來複習。</p><div id="downloads"></div><small>筆記以 Markdown 格式儲存。</small></aside></div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

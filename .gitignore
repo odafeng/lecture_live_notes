@@ -1,0 +1,18 @@
+# Local credentials and Python environment
+.env
+.env.*
+!.env.example
+.venv/
+
+# Private classroom data and local runtime state
+/lectures/
+/.runtime/
+/.remember/
+
+# Generated macOS launcher (rebuild from scripts/)
+/Lecture.app/
+
+# Python and macOS generated files
+__pycache__/
+*.py[cod]
+.DS_Store

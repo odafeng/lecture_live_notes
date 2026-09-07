@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+httpx
+websockets
+python-dotenv
+opencc-python-reimplemented
+markdown-it-py
