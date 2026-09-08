@@ -4,8 +4,16 @@
 !.env.example
 .venv/
 
-# Private classroom data and local runtime state
+# Private classroom data and local runtime state.
+# Recordings, transcripts and notes never enter version control. The path rules below
+# also cover the case where OUTPUT_DIR points somewhere other than lectures/.
 /lectures/
+**/transcript.txt
+**/live_notes.md
+**/final_notes.md
+**/finalize_input.json
+**/session.json
+*.wav
 /.runtime/
 /.remember/
 

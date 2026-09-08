@@ -1,28 +1,104 @@
-# Lecture Live Notes — Gemini Transcribe Live + Claude Haiku
+# Lecture Live Notes
 
-一個適合「大學上課時放著跑」的即時課堂筆記 App。
+把整堂課錄下來，一邊上課一邊生出可以複習的中文筆記。
 
-首次從 GitHub 下載時，請依下方安裝步驟建立 Python 環境，並複製 `.env.example` 為 `.env` 填入自己的 API key。Repo 包含程式、測試與啟動器原始碼；本機 API key、課堂資料及產生的 `Lecture.app` 不納入版本控制。macOS 啟動器的建置方式見第 26 節。
+上課時麥克風持續收音，音訊串到 Gemini 3.5 Transcribe Live 做即時語音辨識，Claude Haiku 4.5 每分鐘把已確認的逐字稿整理成一段筆記。下課按停止，再把整堂課的分段筆記整併成一份完整的複習筆記。全部跑在你自己的電腦上，錄音檔留在本機。
 
-## macOS：雙擊開啟
+輸出是四個檔案：錄音 `lecture.wav`、逐字稿 `transcript.txt`、上課當下逐段產生的 `live_notes.md`、下課後整併的 `final_notes.md`。所有中文都經 OpenCC 轉成臺灣正體，英文術語保留原文。
 
-這台 Mac 已完成環境設定，日常使用只需要：
+## 這適合誰
 
-1. 雙擊桌面的 **Lecture.app**，瀏覽器會自動開啟課堂工作台。
-2. 按「開始上課」，允許瀏覽器使用麥克風。
-3. 下課按「下課／停止」，等到「已儲存」出現後再關閉頁面。
+寫來解決一個具體問題：全英語授課、講很快、術語密集的研究所課程，聽的當下抄不完，事後回聽兩小時錄音又太慢。
 
-不需要開 Terminal，也不需要手動啟動 uvicorn。重複開啟會沿用已啟動的服務；原本的 port 被其他程式占用時，啟動器會自動選擇可用的 port。請使用啟動器打開的網址。
+如果你的情況是這樣，它可能有用：
 
-桌面的 **課堂筆記檔案** 捷徑會打開 `lectures/`。每堂課的逐字稿位於 `lectures/日期/時間/transcript.txt`；同一資料夾也包含錄音與筆記。
+- 課堂內容你有權錄音
+- 你可以接受音訊送到 Google、逐字稿送到 Anthropic 做處理
+- 你願意自己申請兩個 API key 並付用量費用
+- 你的課有大量專有名詞，需要自訂詞彙表來提高辨識率
 
-`Lecture.app` 是這個專案的本機啟動器，沿用現有 `.venv` 與 `.env`，請保留專案資料夾原位。關閉網頁後，本機服務會留在背景供下次使用；Mac 重新開機後，再雙擊即可重新啟動。
+如果你要的是會議記錄 SaaS、需要離線處理、或不能把內容送出去，這個專案不適合你。
 
----
+## 隱私與授權界線
 
-它會在你的電腦上開一個本機網頁，持續使用麥克風收音，將音訊串流到 Gemini 3.5 Transcribe Live 做即時語音辨識，再由 Anthropic Claude Haiku 4.5 把已確認的逐字稿分段整理成課堂筆記。下課按下停止後，App 會再把整堂課的分段筆記整併成一份完整複習筆記。
+**即時音訊會傳送到 Google Gemini API，逐字稿與筆記素材會傳送到 Anthropic API。** 錄音檔本身只留在你的電腦。
 
-> 重要：錄音檔會保存在你的電腦，即時音訊會傳送到 Google Gemini API 做語音辨識，逐字稿與筆記素材會傳送到 Anthropic API 做摘要。請只在你有權錄音、且允許將內容送至雲端服務的場合使用。
+錄音別人講話牽涉的規範因地區與場合而異。課堂錄音通常需要授課者同意，內容可能包含其他人的發言與姓名。請自行確認你的場合允許錄音，也允許把內容送到雲端服務。這個專案不會替你判斷。
+
+專案預設把課堂資料排除在版本控制外（`.gitignore` 涵蓋錄音、逐字稿、筆記與 `session.json`），避免不小心把上課內容推上 GitHub。
+
+## 費用怎麼算
+
+兩個 API 都是用量計費，沒有訂閱制。你付給 Google 和 Anthropic，這個專案不收費也不經手。
+
+摘要端的呼叫結構是這樣，方便你自己估：
+
+| 時機 | 頻率 | 輸入 |
+|---|---|---|
+| 逐段筆記 | 每 60 秒一次（`NOTE_WINDOW_SECONDS`） | 該分鐘的逐字稿 |
+| 章節整併 | 每累積 10 段一次（`ROLLUP_EVERY_BLOCKS`） | 那 10 段筆記 |
+| 最終整併 | 下課時一次 | 全部章節摘要 + 未整併的段落 |
+
+Claude Haiku 4.5 的定價是每百萬 token 輸入 US$1、輸出 US$5。實測一堂 48 分鐘的課，最終整併那一次是輸入 5,437 token、輸出 5,064 token。語音辨識另外由 Gemini 計費，費率以 Google 公告為準。
+
+把 `NOTE_WINDOW_SECONDS` 調大會減少呼叫次數，代價是筆記更新變慢，詳見第 19 節。
+
+## 五分鐘上手
+
+需要 Python 3.10 以上、一支麥克風，以及 Gemini 和 Anthropic 兩個 API key。
+
+```bash
+git clone https://github.com/odafeng/lecture_live_notes.git
+cd lecture_live_notes
+python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env      # 填入兩個 API key
+.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
+```
+
+瀏覽器開 http://127.0.0.1:8000 ，按「開始上課」，允許使用麥克風。下課按「下課／停止」，等「已儲存」出現後再關頁面。
+
+檔案會存在 `lectures/<日期>/<時間>/`。同一天多次錄音會放進同一個日期資料夾。
+
+第一次跑之前建議先開 http://127.0.0.1:8000/health 確認兩個 key 都讀到了（`api_key_configured` 和 `summary_api_key_configured` 都要是 `true`）。
+
+完整的逐步安裝說明在第 3 到第 8 節，包含 Windows 的指令、API key 的申請畫面，以及常見錯誤的排除方式。
+
+## macOS 啟動器
+
+macOS 可以建置一個 `Lecture.app`，雙擊就開，不用碰 Terminal：
+
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python scripts/build_macos_app.py
+```
+
+建置出來的 `Lecture.app` 沿用專案裡的 `.venv` 與 `.env`，所以請保留專案資料夾原位。重複開啟會沿用已啟動的服務；原本的 port 被占用時會自動換一個。關閉網頁後服務留在背景，Mac 重開機後再雙擊即可。
+
+Windows 沒有對應的啟動器，請用上面的 `uvicorn` 指令啟動。
+
+## 需要知道的限制
+
+- **網路品質會直接影響結果。** 語音辨識走 WebSocket，摘要走 HTTPS，兩者都對不穩的連線敏感。專案為此做了串流摘要、分層重試與整併失敗後的重跑機制（見 `docs/adr/`），但爛網路仍會讓逐字稿斷續。
+- **整併失敗時筆記不會消失。** 素材會存成 `finalize_input.json`，可以按「重新整併」重跑，server 也會在背景自動重試，下次開啟時會提示還沒整併完成的課。
+- **啟動器只有 macOS 版。** 應用本身跨平台，但 `Lecture.app` 的建置腳本是 macOS 專用。
+- **筆記品質取決於辨識品質。** 收音差、口音重或術語沒加進詞彙表時，錯誤會一路帶到筆記裡。建議每堂課先測 30 秒（第 17 節）。
+- **不要讓電腦進入睡眠**，瀏覽器分頁被暫停，音訊串流會跟著停。
+
+## 技術架構
+
+- 後端：FastAPI + uvicorn，單一 WebSocket 端點處理音訊上行與筆記下行
+- 語音辨識：Gemini 3.5 Transcribe Live（WebSocket，支援自訂詞彙與 SMART／VERBATIM 兩種模式）
+- 摘要：Anthropic Messages API，串流讀取
+- 前端：原生 HTML/CSS/JS，無框架、無建置步驟
+- 測試：unittest + Playwright，45 個測試涵蓋單元、WebSocket 流程與瀏覽器 E2E，全部使用假的 API 回應，不呼叫真實服務
+
+重要的架構決策記錄在 `docs/adr/`：串流摘要的取捨、整併失敗的復原路徑、keepalive 的設定，以及一天一資料夾的儲存佈局。
+
+## 授權
+
+MIT。你可以自由使用、修改與散布，包含商業用途，只要保留版權聲明與免責條款。詳見 [LICENSE](LICENSE)。
+
+這個專案只提供軟體本身，不承擔你使用它所產生的任何責任，包含錄音的合法性與 API 的用量費用。
 
 ---
 
@@ -1425,8 +1501,8 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000
 如果只記五件事：
 
 ```text
-1. 上課前雙擊桌面的 Lecture.app
-2. 等瀏覽器自動開啟課堂工作台
+1. 上課前啟動 server（macOS 可雙擊 Lecture.app）
+2. 瀏覽器開啟課堂工作台，確認麥克風權限
 3. 專有名詞先貼進 Custom Vocabulary
 4. 上課用 SMART，重要內容按 ⭐
 5. 下課一定按「下課／停止」，再關頁面
