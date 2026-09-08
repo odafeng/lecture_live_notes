@@ -14,7 +14,7 @@
 
 不需要開 Terminal，也不需要手動啟動 uvicorn。重複開啟會沿用已啟動的服務；原本的 port 被其他程式占用時，啟動器會自動選擇可用的 port。請使用啟動器打開的網址。
 
-桌面的 **課堂筆記檔案** 捷徑會打開 `lectures/`。每堂課的逐字稿位於 `lectures/日期_時間/transcript.txt`；同一資料夾也包含錄音與筆記。
+桌面的 **課堂筆記檔案** 捷徑會打開 `lectures/`。每堂課的逐字稿位於 `lectures/日期/時間/transcript.txt`；同一資料夾也包含錄音與筆記。
 
 `Lecture.app` 是這個專案的本機啟動器，沿用現有 `.venv` 與 `.env`，請保留專案資料夾原位。關閉網頁後，本機服務會留在背景供下次使用；Mac 重新開機後，再雙擊即可重新啟動。
 
@@ -749,17 +749,23 @@ lecture_live_notes/lectures/
 
 `.env` 的 `OUTPUT_DIR=lectures` 以專案資料夾為基準，從桌面啟動時也相同；若設定為絕對路徑，則使用該路徑。
 
-每堂課一個資料夾：
+一天一個資料夾，當天每次錄音各一個子資料夾：
 
 ```text
 lectures/
-└── 20260907_090001/
-    ├── lecture.wav
-    ├── transcript.txt
-    ├── live_notes.md
-    ├── final_notes.md
-    └── session.json
+└── 20260907/
+    ├── 090001/
+    │   ├── lecture.wav
+    │   ├── transcript.txt
+    │   ├── live_notes.md
+    │   ├── final_notes.md
+    │   ├── finalize_input.json
+    │   └── session.json
+    └── 143000/
+        └── ...
 ```
+
+一堂課如果中途斷線重錄，會產生多個子資料夾，但它們都落在同一天的資料夾底下。整理過的當日筆記（例如把上下午各段合併成一份 HTML）放在日期資料夾的第一層，跟各段錄音並列。
 
 ## `lecture.wav`
 
@@ -1262,7 +1268,7 @@ CRM, circumferential resection margin
 已經寫入硬碟的檔案仍存在：
 
 ```text
-lectures/<session_id>/
+lectures/<日期>/<時間>/
 ```
 
 但如果沒有正常按「下課／停止」，最後的 final summary 可能沒有完成。
@@ -1387,7 +1393,7 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000
 12. 按 ⭐
 13. 按停止
 14. 確認畫面出現 final notes
-15. 打開 `lectures/<session_id>/`
+15. 打開 `lectures/<日期>/<時間>/`
 16. 確認五個檔案都存在
 17. 播放 `lecture.wav` 確認收音品質
 

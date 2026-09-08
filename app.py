@@ -264,8 +264,14 @@ async def call_anthropic_text(prompt: str, retry_delays: tuple[int, ...] | None 
     return TRADITIONAL_CHINESE.convert(text)
 
 
+def session_dir_for(session_id: str) -> Path:
+    """Recordings are filed under the day they happened: lectures/YYYYMMDD/HHMMSS/."""
+    date, _, clock = session_id.partition("_")
+    return OUTPUT_DIR / date / clock
+
+
 def session_paths(session_id: str):
-    session_dir = OUTPUT_DIR / session_id
+    session_dir = session_dir_for(session_id)
     return {
         "dir": session_dir,
         "wav": session_dir / "lecture.wav",
@@ -354,7 +360,7 @@ async def finalize(session_id: str):
 async def incomplete_sessions():
     """Sessions whose final merge never succeeded, so the browser can offer a re-run."""
     sessions = []
-    for meta_path in sorted(OUTPUT_DIR.glob("*/session.json"), reverse=True):
+    for meta_path in sorted(OUTPUT_DIR.glob("*/*/session.json"), reverse=True):
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -364,7 +370,8 @@ async def incomplete_sessions():
         if not (meta_path.parent / "finalize_input.json").exists():
             continue
         sessions.append({
-            "session_id": meta.get("session_id", meta_path.parent.name),
+            "session_id": meta.get(
+                "session_id", f"{meta_path.parent.parent.name}_{meta_path.parent.name}"),
             "course_title": meta.get("course_title", ""),
             "started_at": meta.get("started_at", ""),
         })
@@ -378,7 +385,7 @@ async def download(session_id: str, filename: str):
     allowed = {"lecture.wav", "transcript.txt", "live_notes.md", "final_notes.md", "session.json"}
     if not re.fullmatch(r"\d{8}_\d{6}", session_id) or filename not in allowed:
         raise HTTPException(status_code=404)
-    path = OUTPUT_DIR / session_id / filename
+    path = session_dir_for(session_id) / filename
     if not path.exists():
         raise HTTPException(status_code=404)
     return FileResponse(path, filename=filename)

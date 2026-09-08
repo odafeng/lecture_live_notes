@@ -201,19 +201,22 @@ class FinalizeTests(unittest.TestCase):
         output = tempfile.TemporaryDirectory()
         self.addCleanup(output.cleanup)
         self.output = Path(output.name)
-        self.session_dir = self.output / self.SESSION
-        self.session_dir.mkdir()
+        # One folder per day, one subfolder per recording: lectures/YYYYMMDD/HHMMSS/.
+        self.session_dir = self.output / "20260908" / "090321"
+        self.session_dir.mkdir(parents=True)
         for target, value in (("OUTPUT_DIR", self.output), ("ANTHROPIC_API_KEY", "test-key")):
             patcher = patch.object(app, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
 
     def write_session(self, session_id=None, status=app.FINAL_STATUS_FAILED, material=True):
-        directory = self.output / (session_id or self.SESSION)
-        directory.mkdir(exist_ok=True)
+        session_id = session_id or self.SESSION
+        date, clock = session_id.split("_")
+        directory = self.output / date / clock
+        directory.mkdir(parents=True, exist_ok=True)
         (directory / "session.json").write_text(json.dumps({
-            "session_id": directory.name, "course_title": "機器學習",
-            "started_at": directory.name, "final_notes_status": status,
+            "session_id": session_id, "course_title": "機器學習",
+            "started_at": session_id, "final_notes_status": status,
         }, ensure_ascii=False), encoding="utf-8")
         (directory / "final_notes.md").write_text(
             "# 機器學習\n\n最終整併失敗：RuntimeError: boom\n", encoding="utf-8")
@@ -283,6 +286,22 @@ class FinalizeTests(unittest.TestCase):
         self.assertEqual(self.status()["final_notes_status"], app.FINAL_STATUS_FAILED)
         self.assertIn("最終整併失敗",
                       (self.session_dir / "final_notes.md").read_text(encoding="utf-8"))
+
+    def test_a_day_gets_one_folder_holding_each_recording(self):
+        self.write_session()
+        self.write_session("20260908_143000", status=app.FINAL_STATUS_OK)
+        self.write_session("20260909_090000", status=app.FINAL_STATUS_OK)
+        self.assertEqual(sorted(p.name for p in self.output.iterdir() if p.is_dir()),
+                         ["20260908", "20260909"])
+        self.assertEqual(sorted(p.name for p in (self.output / "20260908").iterdir()),
+                         ["090321", "143000"])
+
+    def test_downloads_resolve_under_the_day_folder(self):
+        self.write_session()
+        (self.session_dir / "transcript.txt").write_text("逐字稿", encoding="utf-8")
+        with TestClient(app.app) as client:
+            self.assertEqual(client.get(f"/download/{self.SESSION}/transcript.txt").text, "逐字稿")
+            self.assertEqual(client.get("/download/20260101_000000/transcript.txt").status_code, 404)
 
     def test_incomplete_lists_only_failed_sessions_that_can_still_be_merged(self):
         self.write_session()

@@ -137,8 +137,8 @@ class BrowserTests(unittest.TestCase):
 
     def test_unfinished_lecture_is_offered_for_merging_on_the_next_launch(self):
         with tempfile.TemporaryDirectory() as output:
-            session = Path(output) / "20260908_090321"
-            session.mkdir()
+            session = Path(output) / "20260908" / "090321"
+            session.mkdir(parents=True)
             (session / "session.json").write_text(json.dumps({
                 "session_id": "20260908_090321", "course_title": "機器學習",
                 "started_at": "20260908_090321", "final_notes_status": "failed",

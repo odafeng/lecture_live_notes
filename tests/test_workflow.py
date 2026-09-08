@@ -100,8 +100,9 @@ class WorkflowTests(unittest.TestCase):
             # The material for a later re-merge survives the failure.
             metadata = client.get(saved["files"]["metadata"]).json()
             self.assertEqual(metadata["final_notes_status"], app.FINAL_STATUS_FAILED)
+            date, clock = metadata["session_id"].split("_")
             material = json.loads(
-                (Path(output) / metadata["session_id"] / "finalize_input.json").read_text("utf-8"))
+                (Path(output) / date / clock / "finalize_input.json").read_text("utf-8"))
             self.assertEqual(material["course_title"], "機器學習")
             self.assertIn(TRADITIONAL_TRANSCRIPT, material["remaining"])
             self.assertEqual(client.get("/sessions/incomplete").json()["sessions"][0]["session_id"],
