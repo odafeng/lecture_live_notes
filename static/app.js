@@ -10,6 +10,7 @@ let readyTimeout = null;
 let autoScroll = true;
 let transcriptCount = 0;
 let noteCount = 0;
+let currentSessionId = null;
 
 const $ = id => document.getElementById(id);
 const startBtn = $("startBtn"), stopBtn = $("stopBtn"), markBtn = $("markBtn");
@@ -17,6 +18,7 @@ const statusEl = $("status"), timerEl = $("timer");
 const courseTitleEl = $("courseTitle"), customVocabularyEl = $("customVocabulary"), transcriptionModeEl = $("transcriptionMode");
 const transcriptEl = $("transcript"), interimEl = $("interim"), notesEl = $("notes");
 const finalPanel = $("finalPanel"), finalEl = $("final"), downloadsEl = $("downloads");
+const remergeBtn = $("remergeBtn"), recoveryEl = $("recovery"), recoveryBtn = $("recoveryBtn");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 $("todayDate").textContent = new Intl.DateTimeFormat("zh-TW", {month: "long", day: "numeric", weekday: "long"}).format(new Date());
@@ -157,9 +159,57 @@ function renderDownloads(files) {
     downloadsEl.appendChild(a);
   }
 }
+function formatSessionId(id) {
+  const parts = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/.exec(id || "");
+  return parts ? `${Number(parts[2])}月${Number(parts[3])}日 ${parts[4]}:${parts[5]}` : id;
+}
+async function runFinalize(sessionId, button) {
+  const label = button.querySelector("span") || button;
+  const original = label.textContent;
+  button.disabled = true;
+  label.textContent = "重新整併中…";
+  setStatus("正在重新整併完整筆記…");
+  try {
+    const response = await fetch(`/finalize/${sessionId}`, {method: "POST"});
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail || `伺服器回應 ${response.status}`);
+    finalPanel.hidden = false;
+    finalEl.innerHTML = body.html;
+    remergeBtn.hidden = false;
+    currentSessionId = sessionId;
+    $("notice").hidden = true;
+    recoveryEl.hidden = true;
+    setStatus("完整筆記已重新整併完成");
+    finalPanel.scrollIntoView({behavior: reducedMotion.matches ? "instant" : "smooth", block: "start"});
+  } catch (error) {
+    showNotice(`重新整併失敗：${error.message}`);
+    setStatus("重新整併沒有成功");
+  } finally {
+    label.textContent = original;
+    button.disabled = false;
+  }
+}
+async function checkIncompleteSessions() {
+  let sessions = [];
+  try {
+    const response = await fetch("/sessions/incomplete");
+    if (!response.ok) return;
+    sessions = (await response.json()).sessions || [];
+  } catch (error) {
+    return;
+  }
+  if (!sessions.length) return;
+  const [session] = sessions;
+  const name = session.course_title || "上一堂課";
+  $("recoveryText").textContent =
+    `${name}（${formatSessionId(session.started_at)}）的完整筆記沒有整併完成。逐字稿與即時筆記都還在，可以現在重跑。`;
+  recoveryEl.hidden = false;
+  recoveryBtn.onclick = () => runFinalize(session.session_id, recoveryBtn);
+}
 function handleMessage(event) {
   const msg = JSON.parse(event.data);
   if (msg.type === "ready") settleReady();
+  if (msg.type === "session") currentSessionId = msg.session_id;
   if (msg.type === "asr_session") {
     if (recording) setStatus("正在聆聽，記錄每一句話");
     if ($("notice").dataset.source === "asr") $("notice").hidden = true;
@@ -182,6 +232,10 @@ function handleMessage(event) {
   if (msg.type === "final") {
     finalPanel.hidden = false;
     finalEl.innerHTML = msg.html;
+    remergeBtn.hidden = false;
+    if (msg.status === "failed") {
+      showNotice("完整筆記整併失敗，逐字稿與即時筆記都已保存。伺服器會在背景自動重試，你也可以按「重新整併」立刻重跑。");
+    }
     finalPanel.scrollIntoView({behavior: reducedMotion.matches ? "instant" : "smooth", block: "start"});
   }
   if (msg.type === "saved") {
@@ -200,6 +254,7 @@ function resetWorkspace() {
   interimEl.textContent = ""; interimEl.hidden = true;
   $("transcriptEmpty").hidden = false; $("notesEmpty").hidden = false;
   finalPanel.hidden = true; $("savedBadge").hidden = true; $("notice").hidden = true;
+  remergeBtn.hidden = true; recoveryEl.hidden = true;
   transcriptCount = 0; noteCount = 0;
   $("transcriptCount").textContent = "0 段"; $("noteCount").textContent = "0 段筆記";
   timerEl.textContent = "00:00:00";
@@ -321,3 +376,5 @@ transcriptionModeEl.addEventListener("change", () => {
   $("modeHelp").textContent = transcriptionModeEl.value === "VERBATIM" ? "盡量保留原始措辭與口頭語句。" : "省略口頭贅詞，讓內容更好讀。";
 });
 courseTitleEl.addEventListener("input", () => { $("workspaceTitle").textContent = courseTitleEl.value.trim() || "今天，專心上課。"; });
+remergeBtn.addEventListener("click", () => { if (currentSessionId) runFinalize(currentSessionId, remergeBtn); });
+checkIncompleteSessions();

@@ -1,7 +1,9 @@
 import io
+import json
 import tempfile
 import unittest
 import wave
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -40,6 +42,11 @@ class WorkflowTests(unittest.TestCase):
                 final = receive_until(ws, "final", messages)
                 saved = receive_until(ws, "saved", messages)
 
+            # Pings share the uplink with audio frames, so the pong deadline must survive a backlog.
+            keepalive = requests.connect.call_args.kwargs
+            self.assertGreaterEqual(keepalive["ping_timeout"], 60)
+            self.assertLess(keepalive["ping_interval"], keepalive["ping_timeout"])
+
             interim = next(m for m in messages if m["type"] == "interim" and m["text"])
             transcript = next(m for m in messages if m["type"] == "transcript")
             self.assertEqual(interim["text"], TRADITIONAL_TRANSCRIPT)
@@ -77,15 +84,28 @@ class WorkflowTests(unittest.TestCase):
                 final = receive_until(ws, "final", messages)
                 saved = receive_until(ws, "saved", messages)
 
-            self.assertEqual(len(requests), 8)
+            # 4 live-note attempts plus 5 for the final merge, which retries harder.
+            self.assertEqual(len(requests), 9)
+            self.assertEqual(final["status"], app.FINAL_STATUS_FAILED)
             self.assertIn("HTTP 503", block["text"])
             self.assertIn("已嘗試 4 次", block["text"])
+            self.assertIn("已嘗試 5 次", final["text"])
             self.assertIn(TRADITIONAL_TRANSCRIPT, block["text"])
             self.assertIn(TRADITIONAL_TRANSCRIPT, final["text"])
             self.assertIn("<h1>機器學習</h1>", final["html"])
             self.assertNotIn("https://", final["text"])
             self.assertIn(TRADITIONAL_TRANSCRIPT, client.get(saved["files"]["transcript"]).text)
             self.assertIn(TRADITIONAL_TRANSCRIPT, client.get(saved["files"]["final_notes"]).text)
+
+            # The material for a later re-merge survives the failure.
+            metadata = client.get(saved["files"]["metadata"]).json()
+            self.assertEqual(metadata["final_notes_status"], app.FINAL_STATUS_FAILED)
+            material = json.loads(
+                (Path(output) / metadata["session_id"] / "finalize_input.json").read_text("utf-8"))
+            self.assertEqual(material["course_title"], "機器學習")
+            self.assertIn(TRADITIONAL_TRANSCRIPT, material["remaining"])
+            self.assertEqual(client.get("/sessions/incomplete").json()["sessions"][0]["session_id"],
+                             metadata["session_id"])
 
 
 if __name__ == "__main__":

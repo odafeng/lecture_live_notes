@@ -24,6 +24,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></symbol>
     <symbol id="i-sound" viewBox="0 0 24 24"><path d="M3 10v4M7.5 6v12M12 3v18M16.5 7v10M21 10v4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-.6 4M20 5v6h-6"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -84,6 +85,7 @@
         </div>
       </section>
       <div id="notice" class="notice" role="alert" hidden><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span id="noticeText"></span></div>
+      <div id="recovery" class="notice notice-recovery" role="status" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span id="recoveryText"></span><button id="recoveryBtn" class="button button-quiet">重新整併</button></div>
 
       <div class="work-area" id="workArea" data-view="transcript">
         <div class="reading-toolbar">
@@ -120,7 +122,7 @@
       <p class="workspace-footnote"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg><span>下課後，會將這堂課的內容整理成完整筆記。</span></p>
 
       <section id="finalPanel" class="final-panel" aria-labelledby="finalHeading" hidden>
-        <header class="final-header"><div><span class="eyebrow">READY TO REVISIT</span><h2 id="finalHeading">把這堂課，好好收起來。</h2><p>重讀重點，也保留每一份課堂記錄。</p></div><span id="savedBadge" class="saved-badge" hidden><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>已儲存</span></header>
+        <header class="final-header"><div><span class="eyebrow">READY TO REVISIT</span><h2 id="finalHeading">把這堂課，好好收起來。</h2><p>重讀重點，也保留每一份課堂記錄。</p></div><div class="final-actions"><button id="remergeBtn" class="button button-quiet" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span id="remergeLabel">重新整併</span></button><span id="savedBadge" class="saved-badge" hidden><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>已儲存</span></div></header>
         <div class="final-layout"><article class="final-document"><div class="document-kicker">CLASS NOTES <span>課堂完整筆記</span></div><div id="final" class="markdown"></div></article><aside class="downloads-panel" aria-labelledby="downloadHeading"><svg class="icon download-heading-icon"><use href="#i-download"/></svg><h3 id="downloadHeading">帶走這堂課</h3><p>下載檔案，隨時回來複習。</p><div id="downloads"></div><small>筆記以 Markdown 格式儲存。</small></aside></div>
       </section>
     </main>

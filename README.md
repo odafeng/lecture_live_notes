@@ -372,6 +372,8 @@ NOTE_WINDOW_SECONDS=60
 ROLLUP_EVERY_BLOCKS=10
 SESSION_ROTATE_SECONDS=570
 GEMINI_FINALIZE_GRACE_SECONDS=1.5
+GEMINI_PING_INTERVAL_SECONDS=30
+GEMINI_PING_TIMEOUT_SECONDS=60
 OUTPUT_DIR=lectures
 ```
 
@@ -827,6 +829,14 @@ Gemini finalized transcription。
 
 ---
 
+## `finalize_input.json`
+
+整併完整筆記時用的素材，包含課程名稱、章節摘要，以及還沒併進章節的最後幾段筆記。
+
+留著這個檔案是為了讓整併可以重跑。按「重新整併」時讀的是它，不是去解析 `final_notes.md`。你手動編輯過筆記也不會影響重跑。
+
+---
+
 ## `session.json`
 
 記錄這堂課的 metadata，例如：
@@ -1080,6 +1090,28 @@ UI 輸入的詞會和 `.env` 合併、去除重複，再取前 100 個。
 
 ---
 
+## GEMINI_PING_INTERVAL_SECONDS 與 GEMINI_PING_TIMEOUT_SECONDS
+
+這兩個值控制 App 多久確認一次 Gemini Live 連線還活著。預設每 30 秒送一次 ping，60 秒內沒有回應就判定連線已死並重連。
+
+網路不穩時會需要放寬。keepalive ping 跟音訊資料排在同一條上傳通道，上傳一慢，音訊就積壓，ping 被推到佇列後面，回應自然遲到。這種情況下連線其實是好的，只是回應晚到，太短的期限會把健康的連線誤判成斷線。
+
+`server.log` 出現這行，代表期限太緊：
+
+```text
+sent 1011 (internal error) keepalive ping timeout
+```
+
+`sent` 表示是 App 這端主動關閉連線，不是 Google 把你踢掉。校園或醫院的共用 Wi-Fi 常有這個問題，可以把 timeout 調到 90 或 120：
+
+```env
+GEMINI_PING_TIMEOUT_SECONDS=120
+```
+
+代價是真的斷線時要多花這段時間才會被發現，這段期間的逐字稿會掉。錄音不受影響。
+
+---
+
 # 20. 常見問題與排錯
 
 ## 問題 1：`api_key_configured` 是 false
@@ -1239,7 +1271,29 @@ lectures/<session_id>/
 
 ---
 
-## 問題 8：電腦睡眠或闔上螢幕
+## 問題 8：完整筆記整併失敗
+
+`final_notes.md` 開頭出現這行，表示最後一次整併沒有成功：
+
+```text
+最終整併失敗：RuntimeError: Anthropic 摘要請求失敗（ConnectError），已嘗試 5 次。
+```
+
+素材沒有丟。錯誤訊息下面就是章節摘要和還沒整併的筆記，逐字稿、即時筆記和錄音也都完整。
+
+有三條路可以救回來，不用手動處理：
+
+1. 完整筆記面板右上角的「重新整併」按鈕，立刻重跑一次。
+2. server 如果還開著，會在背景自動重試（1 分鐘、5 分鐘、15 分鐘後各一次），成功就停。
+3. 下次打開 App 時，頁面上方會出現提示，列出上一堂沒整併完成的課，按「重新整併」即可。
+
+第 2 條只在 server 還活著時有效。下課直接關機的話，靠第 3 條。
+
+整併失敗幾乎都是網路問題。整併是整堂課最長的一次 API 呼叫，要一口氣生成五千字左右，比逐塊筆記久得多。網路不穩時它最容易中招。可以先確認網路，再按重新整併。
+
+---
+
+## 問題 9：電腦睡眠或闔上螢幕
 
 不要讓電腦進入 sleep。
 
@@ -1386,7 +1440,7 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-涵蓋 unit、啟動 smoke、WebSocket 完整流程及瀏覽器 E2E，包括暫時失敗重試、持續 `503` 時保留逐字稿、繁體輸出、Markdown 排版、標記重點與下載檔案。
+涵蓋 unit、啟動 smoke、WebSocket 完整流程及瀏覽器 E2E，包括暫時失敗重試、持續 `503` 時保留逐字稿、繁體輸出、Markdown 排版、標記重點與下載檔案。摘要以 streaming 讀取，測試也涵蓋串流中途斷線後重試不會重複輸出、串流內回報的錯誤事件、整併失敗後重跑，以及下次啟動時列出未完成的課。
 
 UI 測試涵蓋 320、390、768、1024、1440px 五種寬度，以及連線中與整理期間防止重複開始、麥克風授權失敗、連線中斷後釋放麥克風、自動捲動切換與鍵盤操作。
 

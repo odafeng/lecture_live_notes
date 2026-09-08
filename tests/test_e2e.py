@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import socket
@@ -112,6 +113,52 @@ class BrowserTests(unittest.TestCase):
                     self.assertIn("**重點**", content)
                     self.assertNotIn("<h1>", content)
                     self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width)
+
+    def test_failed_merge_can_be_rerun_from_the_finished_lecture(self):
+        with tempfile.TemporaryDirectory() as output, fake_services(output) as requests, \
+                running_server() as url, browser_page(url) as page:
+            requests.always_fail = True
+            page.locator("#courseTitle").fill("机器学习")
+            page.get_by_role("button", name="開始上課", exact=True).click()
+            expect(page.locator("body")).to_have_attribute("data-phase", "recording")
+            expect(page.locator("#transcript")).to_contain_text(TRADITIONAL_TRANSCRIPT)
+            page.get_by_role("button", name="下課／停止").click()
+
+            expect(page.locator("#finalPanel")).to_be_visible(timeout=15000)
+            expect(page.locator("#final")).to_contain_text("最終整併失敗")
+            expect(page.locator("#notice")).to_contain_text("完整筆記整併失敗")
+            expect(page.locator("#remergeBtn")).to_be_visible()
+
+            requests.always_fail = False
+            page.locator("#remergeBtn").click()
+            expect(page.locator("#final h1")).to_have_text("機器學習", timeout=15000)
+            expect(page.locator("#final")).not_to_contain_text("最終整併失敗")
+            expect(page.locator("#notice")).to_be_hidden()
+
+    def test_unfinished_lecture_is_offered_for_merging_on_the_next_launch(self):
+        with tempfile.TemporaryDirectory() as output:
+            session = Path(output) / "20260908_090321"
+            session.mkdir()
+            (session / "session.json").write_text(json.dumps({
+                "session_id": "20260908_090321", "course_title": "機器學習",
+                "started_at": "20260908_090321", "final_notes_status": "failed",
+            }, ensure_ascii=False), encoding="utf-8")
+            (session / "finalize_input.json").write_text(json.dumps({
+                "course_title": "機器學習", "chapters": "## 章節摘要", "remaining": "### 尚未整併",
+            }, ensure_ascii=False), encoding="utf-8")
+            (session / "final_notes.md").write_text(
+                "# 機器學習\n\n最終整併失敗：RuntimeError: boom\n", encoding="utf-8")
+
+            with fake_services(output), running_server() as url, browser_page(url) as page:
+                expect(page.locator("#recovery")).to_be_visible()
+                expect(page.locator("#recovery")).to_contain_text("機器學習")
+                expect(page.locator("#recovery")).to_contain_text("9月8日 09:03")
+                page.locator("#recoveryBtn").click()
+                expect(page.locator("#finalPanel")).to_be_visible(timeout=15000)
+                expect(page.locator("#final h1")).to_have_text("機器學習")
+                expect(page.locator("#recovery")).to_be_hidden()
+            self.assertNotIn("最終整併失敗",
+                             (session / "final_notes.md").read_text(encoding="utf-8"))
 
     def test_settings_and_reading_controls_at_different_widths(self):
         with running_server() as url:

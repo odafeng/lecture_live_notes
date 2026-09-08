@@ -168,6 +168,10 @@ body[data-phase="error"] .recording-dot { background: var(--error); }
 .final-header p { font-size: 11px; color: var(--muted); margin: 0; }
 .saved-badge { display: flex; gap: 5px; align-items: center; padding: 5px 10px; border-radius: 20px; background: #e7efde; color: #6a8657; font-size: 10px; white-space: nowrap; }
 .saved-badge .icon { width: 14px; height: 14px; }
+.final-actions { display: flex; align-items: center; gap: 10px; }
+.notice-recovery { color: #4c6150; border-color: var(--divider); background: var(--soft); align-items: center; }
+.notice-recovery #recoveryText { flex: 1; }
+.notice-recovery .button { min-height: 34px; padding: 6px 13px; }
 .final-layout { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 25px; align-items: start; }
 .final-document { min-width: 0; padding: 34px; background: var(--paper); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 4px 10px #29463003; }
 .document-kicker { display: flex; justify-content: space-between; gap: 15px; border-bottom: 1px solid #e6eadb; padding-bottom: 16px; margin-bottom: 27px; color: var(--muted); font-size: 9px; letter-spacing: .15em; }

@@ -41,6 +41,18 @@ NOTE_WINDOW_SECONDS = int(os.getenv("NOTE_WINDOW_SECONDS", "60"))
 ROLLUP_EVERY_BLOCKS = int(os.getenv("ROLLUP_EVERY_BLOCKS", "10"))
 SESSION_ROTATE_SECONDS = int(os.getenv("SESSION_ROTATE_SECONDS", "570"))
 GEMINI_FINALIZE_GRACE_SECONDS = float(os.getenv("GEMINI_FINALIZE_GRACE_SECONDS", "1.5"))
+# Keepalive pings queue behind audio frames, so a congested uplink delays the pong rather than
+# the network dropping. A 20s deadline kept closing healthy sessions (1011 keepalive ping timeout).
+GEMINI_PING_INTERVAL_SECONDS = int(os.getenv("GEMINI_PING_INTERVAL_SECONDS", "30"))
+GEMINI_PING_TIMEOUT_SECONDS = int(os.getenv("GEMINI_PING_TIMEOUT_SECONDS", "60"))
+
+# Live note blocks fail cheaply (the transcript fallback keeps the material), so they give up fast
+# rather than stalling the note worker. The final merge is the expensive one to lose, so it waits.
+LIVE_RETRY_DELAYS = (2, 4, 8)
+FINAL_RETRY_DELAYS = (5, 15, 45, 120)
+BACKGROUND_RETRY_DELAYS = (60, 300, 900)
+# Responses are streamed, so `read` bounds the gap between chunks rather than the whole generation.
+STREAM_TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=60.0, pool=30.0)
 
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "lectures")).expanduser()
 if not OUTPUT_DIR.is_absolute():
@@ -169,47 +181,84 @@ def final_prompt(chapters: str, remaining_blocks: str, course_title: str) -> str
 """.strip()
 
 
-async def call_anthropic_text(prompt: str) -> str:
+class AnthropicStreamError(Exception):
+    """Retryable error reported by the server inside an SSE stream."""
+
+
+async def stream_anthropic_message(client: httpx.AsyncClient, headers: dict[str, str],
+                                   payload: dict[str, Any]) -> tuple[str, str]:
+    """Read one streamed Messages response and return its text and stop reason."""
+    parts: list[str] = []
+    stop_reason = ""
+    async with client.stream("POST", ANTHROPIC_MESSAGES_URL, headers=headers, json=payload) as response:
+        if response.status_code >= 400:
+            await response.aread()
+            response.raise_for_status()
+        async for line in response.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+            try:
+                event = json.loads(line[6:])
+            except json.JSONDecodeError:
+                continue
+            kind = event.get("type")
+            if kind == "content_block_delta":
+                delta = event.get("delta") or {}
+                if delta.get("type") == "text_delta":
+                    parts.append(str(delta.get("text", "")))
+            elif kind == "message_delta":
+                stop_reason = (event.get("delta") or {}).get("stop_reason") or stop_reason
+            elif kind == "error":
+                raise AnthropicStreamError((event.get("error") or {}).get("type", "stream_error"))
+    return "".join(parts), stop_reason
+
+
+async def call_anthropic_text(prompt: str, retry_delays: tuple[int, ...] | None = None) -> str:
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY is not set.")
+
+    # Resolved at call time so the module-level default stays patchable.
+    if retry_delays is None:
+        retry_delays = LIVE_RETRY_DELAYS
 
     payload = {
         "model": SUMMARY_MODEL,
         "max_tokens": 8192,
         "messages": [{"role": "user", "content": prompt}],
+        "stream": True,
     }
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
     }
 
-    async with httpx.AsyncClient(timeout=180) as client:
-        for attempt in range(4):
+    last_attempt = len(retry_delays)
+    async with httpx.AsyncClient(timeout=STREAM_TIMEOUT) as client:
+        for attempt in range(last_attempt + 1):
             try:
-                response = await client.post(ANTHROPIC_MESSAGES_URL, headers=headers, json=payload)
-                response.raise_for_status()
+                text, stop_reason = await stream_anthropic_message(client, headers, payload)
                 break
-            except (httpx.HTTPStatusError, httpx.TransportError) as e:
+            except (httpx.HTTPStatusError, httpx.TransportError, AnthropicStreamError) as e:
                 if isinstance(e, httpx.HTTPStatusError):
                     status = e.response.status_code
                     if status not in {429, 500, 502, 503, 504, 529}:
                         raise
                     reason = f"HTTP {status}"
+                elif isinstance(e, AnthropicStreamError):
+                    reason = str(e)
                 else:
                     reason = type(e).__name__
-                if attempt == 3:
-                    raise RuntimeError(f"Anthropic 摘要請求失敗（{reason}），已嘗試 4 次。") from e
-                delay = 2 ** (attempt + 1)
-                logger.warning("Anthropic summary failed (%s); retrying in %s seconds (%s/3)",
-                               reason, delay, attempt + 1)
+                if attempt == last_attempt:
+                    raise RuntimeError(
+                        f"Anthropic 摘要請求失敗（{reason}），已嘗試 {last_attempt + 1} 次。") from e
+                delay = retry_delays[attempt]
+                logger.warning("Anthropic summary failed (%s); retrying in %s seconds (%s/%s)",
+                               reason, delay, attempt + 1, last_attempt)
                 await asyncio.sleep(delay)
-        data = response.json()
 
-    if data.get("stop_reason") == "max_tokens":
+    if stop_reason == "max_tokens":
         raise RuntimeError("Anthropic 摘要達到輸出長度上限，未產生完整筆記。")
-    parts = data.get("content") or []
-    text = "".join(part.get("text", "") for part in parts
-                   if isinstance(part, dict) and part.get("type") == "text").strip()
+    text = text.strip()
     if not text:
         raise RuntimeError("Anthropic 未回傳可用的摘要文字。")
     return TRADITIONAL_CHINESE.convert(text)
@@ -224,7 +273,104 @@ def session_paths(session_id: str):
         "notes": session_dir / "live_notes.md",
         "final": session_dir / "final_notes.md",
         "meta": session_dir / "session.json",
+        "finalize_input": session_dir / "finalize_input.json",
     }
+
+
+FINAL_STATUS_OK = "ok"
+FINAL_STATUS_FAILED = "failed"
+SESSION_ID_PATTERN = r"\d{8}_\d{6}"
+
+_background_tasks: set[asyncio.Task] = set()
+
+
+def final_fallback_notes(course_title: str, chapters: str, remaining: str, error: BaseException) -> str:
+    return TRADITIONAL_CHINESE.convert(
+        f"# {course_title or '課堂筆記'}\n\n"
+        f"最終整併失敗：{type(error).__name__}: {error}\n\n"
+        f"## 章節摘要\n{chapters}\n\n"
+        f"## 尚未整併筆記\n{remaining}\n"
+    )
+
+
+def set_final_status(session_id: str, status: str) -> None:
+    """Record whether final_notes.md holds a real merge or the raw fallback."""
+    meta_path = session_paths(session_id)["meta"]
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    meta["final_notes_status"] = status
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+async def finalize_session(session_id: str) -> str:
+    """Re-run the final merge from saved material and overwrite final_notes.md."""
+    paths = session_paths(session_id)
+    material = json.loads(paths["finalize_input"].read_text(encoding="utf-8"))
+    notes = await call_anthropic_text(
+        final_prompt(material.get("chapters", ""), material.get("remaining", ""),
+                     material.get("course_title", "")),
+        retry_delays=FINAL_RETRY_DELAYS,
+    )
+    paths["final"].write_text(notes + "\n", encoding="utf-8")
+    set_final_status(session_id, FINAL_STATUS_OK)
+    return notes
+
+
+async def retry_finalize_in_background(session_id: str) -> None:
+    """Keep retrying after the browser is gone; the server outlives the websocket."""
+    for delay in BACKGROUND_RETRY_DELAYS:
+        await asyncio.sleep(delay)
+        try:
+            await finalize_session(session_id)
+        except Exception as e:
+            logger.warning("Background finalize failed for %s (%s)", session_id, e)
+        else:
+            logger.info("Background finalize succeeded for %s", session_id)
+            return
+
+
+def spawn_background_finalize(session_id: str) -> None:
+    task = asyncio.create_task(retry_finalize_in_background(session_id))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+@app.post("/finalize/{session_id}")
+async def finalize(session_id: str):
+    if not re.fullmatch(SESSION_ID_PATTERN, session_id):
+        raise HTTPException(status_code=404)
+    if not session_paths(session_id)["finalize_input"].exists():
+        raise HTTPException(status_code=404, detail="這堂課沒有可重新整併的素材。")
+    try:
+        notes = await finalize_session(session_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"重新整併失敗：{type(e).__name__}: {e}")
+    return {"session_id": session_id, "text": notes, "html": MARKDOWN.render(notes)}
+
+
+@app.get("/sessions/incomplete")
+async def incomplete_sessions():
+    """Sessions whose final merge never succeeded, so the browser can offer a re-run."""
+    sessions = []
+    for meta_path in sorted(OUTPUT_DIR.glob("*/session.json"), reverse=True):
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if meta.get("final_notes_status") != FINAL_STATUS_FAILED:
+            continue
+        if not (meta_path.parent / "finalize_input.json").exists():
+            continue
+        sessions.append({
+            "session_id": meta.get("session_id", meta_path.parent.name),
+            "course_title": meta.get("course_title", ""),
+            "started_at": meta.get("started_at", ""),
+        })
+        if len(sessions) >= 5:
+            break
+    return {"sessions": sessions}
 
 
 @app.get("/download/{session_id}/{filename}")
@@ -414,8 +560,8 @@ async def websocket_endpoint(ws: WebSocket):
                 gemini_ws = await websockets.connect(
                     url,
                     max_size=8 * 1024 * 1024,
-                    ping_interval=20,
-                    ping_timeout=20,
+                    ping_interval=GEMINI_PING_INTERVAL_SECONDS,
+                    ping_timeout=GEMINI_PING_TIMEOUT_SECONDS,
                     close_timeout=5,
                 )
 
@@ -521,8 +667,9 @@ async def websocket_endpoint(ws: WebSocket):
                     return
                 await asyncio.sleep(min(1.5 * failures, 6))
             finally:
-                if receiver_task and not receiver_task.done():
-                    receiver_task.cancel()
+                if receiver_task:
+                    if not receiver_task.done():
+                        receiver_task.cancel()
                     try:
                         await receiver_task
                     except BaseException:
@@ -667,15 +814,18 @@ async def websocket_endpoint(ws: WebSocket):
 
         remaining = "\n\n".join(note_blocks)
         chapters = "\n\n".join(chapter_summaries)
+        # Written before the merge runs so a failed session can be re-merged without the websocket.
+        paths["finalize_input"].write_text(json.dumps(
+            {"course_title": course_title, "chapters": chapters, "remaining": remaining},
+            ensure_ascii=False, indent=2), encoding="utf-8")
+
+        final_status = FINAL_STATUS_OK
         try:
-            final_notes = await call_anthropic_text(final_prompt(chapters, remaining, course_title))
+            final_notes = await call_anthropic_text(
+                final_prompt(chapters, remaining, course_title), retry_delays=FINAL_RETRY_DELAYS)
         except Exception as e:
-            final_notes = TRADITIONAL_CHINESE.convert(
-                f"# {course_title or '課堂筆記'}\n\n"
-                f"最終整併失敗：{type(e).__name__}: {e}\n\n"
-                f"## 章節摘要\n{chapters}\n\n"
-                f"## 尚未整併筆記\n{remaining}\n"
-            )
+            final_status = FINAL_STATUS_FAILED
+            final_notes = final_fallback_notes(course_title, chapters, remaining, e)
 
         paths["final"].write_text(final_notes + "\n", encoding="utf-8")
         duration = await get_audio_elapsed()
@@ -692,11 +842,16 @@ async def websocket_endpoint(ws: WebSocket):
             "note_window_seconds": NOTE_WINDOW_SECONDS,
             "gemini_session_rotate_seconds": SESSION_ROTATE_SECONDS,
             "disconnected": disconnected,
+            "final_notes_status": final_status,
         }
         paths["meta"].write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
+        if final_status == FINAL_STATUS_FAILED:
+            spawn_background_finalize(session_id)
+
         if not disconnected:
-            await safe_send({"type": "final", "text": final_notes, "html": MARKDOWN.render(final_notes)})
+            await safe_send({"type": "final", "text": final_notes,
+                             "html": MARKDOWN.render(final_notes), "status": final_status})
             await safe_send({
                 "type": "saved",
                 "session_id": session_id,

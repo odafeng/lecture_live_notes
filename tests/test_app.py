@@ -1,7 +1,10 @@
+import asyncio
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 import runpy
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, call, patch
 
@@ -9,13 +12,30 @@ import httpx
 from fastapi.testclient import TestClient
 
 import app
+from tests.fakes import sse, stream_response
 
 
 def text_response(text="### 课堂笔记\n- **重点**：machine learning 的类别变项。"):
-    return httpx.Response(200, json={
-        "content": [{"type": "text", "text": text}],
-        "stop_reason": "end_turn",
-    })
+    return stream_response([text])
+
+
+class BrokenStream(httpx.AsyncByteStream):
+    """A response that dies partway through, the way a dropped connection does."""
+
+    def __init__(self, payload: bytes):
+        self.payload = payload
+
+    async def __aiter__(self):
+        yield self.payload
+        raise httpx.RemoteProtocolError("peer closed connection mid-stream")
+
+
+def truncated_stream(text):
+    event = {"type": "content_block_delta", "index": 0,
+             "delta": {"type": "text_delta", "text": text}}
+    body = f"event: content_block_delta\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+    return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                          stream=BrokenStream(body.encode()))
 
 
 class SummaryTests(unittest.IsolatedAsyncioTestCase):
@@ -24,7 +44,7 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         self.key.start()
         self.addCleanup(self.key.stop)
 
-    async def request_with_responses(self, responses):
+    async def request_with_responses(self, responses, retry_delays=None):
         requests = []
         outcomes = iter(responses)
 
@@ -39,7 +59,7 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(app.httpx, "AsyncClient", return_value=client), \
                 patch.object(app.asyncio, "sleep", new_callable=AsyncMock) as sleep:
             try:
-                result = await app.call_anthropic_text("請整理課堂筆記。")
+                result = await app.call_anthropic_text("請整理課堂筆記。", retry_delays)
             except Exception as exc:
                 result = exc
         return result, requests, sleep
@@ -57,6 +77,7 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(request.content)
         self.assertEqual(payload["model"], app.SUMMARY_MODEL)
         self.assertEqual(payload["max_tokens"], 8192)
+        self.assertTrue(payload["stream"])
         self.assertEqual(payload["messages"], [{"role": "user", "content": "請整理課堂筆記。"}])
 
     async def test_transient_http_failure_recovers(self):
@@ -113,24 +134,56 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(requests), 1)
         sleep.assert_not_awaited()
 
-    async def test_only_text_blocks_are_returned(self):
-        result, _, _ = await self.request_with_responses([httpx.Response(200, json={
-            "content": [{"type": "thinking", "thinking": "internal"},
-                        {"type": "text", "text": "课堂"},
-                        {"type": "text", "text": "笔记"}],
-            "stop_reason": "end_turn",
-        })])
+    async def test_only_text_deltas_are_returned(self):
+        result, _, _ = await self.request_with_responses([sse([
+            {"type": "content_block_delta", "index": 0,
+             "delta": {"type": "thinking_delta", "thinking": "internal"}},
+            {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "课堂"}},
+            {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "笔记"}},
+            {"type": "message_delta", "delta": {"stop_reason": "end_turn"}},
+        ])])
         self.assertEqual(result, "課堂筆記")
 
     async def test_truncated_summary_is_not_reported_as_complete(self):
-        result, requests, sleep = await self.request_with_responses([httpx.Response(200, json={
-            "content": [{"type": "text", "text": "未完成的笔记"}],
-            "stop_reason": "max_tokens",
-        })])
+        result, requests, sleep = await self.request_with_responses([
+            stream_response(["未完成的笔记"], stop_reason="max_tokens"),
+        ])
         self.assertIsInstance(result, RuntimeError)
         self.assertIn("輸出長度上限", str(result))
         self.assertEqual(len(requests), 1)
         sleep.assert_not_awaited()
+
+    async def test_dropped_stream_is_retried_without_duplicating_partial_text(self):
+        result, requests, sleep = await self.request_with_responses([
+            truncated_stream("前半段筆記"), text_response("完整笔记"),
+        ])
+        self.assertEqual(result, "完整筆記")
+        self.assertEqual(len(requests), 2)
+        sleep.assert_awaited_once_with(2)
+
+    async def test_error_event_inside_stream_is_retried(self):
+        result, requests, sleep = await self.request_with_responses([
+            sse([{"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}]),
+            text_response(),
+        ])
+        self.assertIsInstance(result, str)
+        self.assertEqual(len(requests), 2)
+        sleep.assert_awaited_once_with(2)
+
+    async def test_error_event_names_its_type_when_retries_run_out(self):
+        result, _, _ = await self.request_with_responses(
+            [sse([{"type": "error", "error": {"type": "overloaded_error"}}]) for _ in range(4)])
+        self.assertIsInstance(result, RuntimeError)
+        self.assertIn("overloaded_error", str(result))
+
+    async def test_final_merge_waits_far_longer_than_a_live_note(self):
+        result, requests, sleep = await self.request_with_responses(
+            [httpx.Response(503) for _ in range(4)] + [text_response()],
+            retry_delays=app.FINAL_RETRY_DELAYS)
+        self.assertIsInstance(result, str)
+        self.assertEqual(len(requests), 5)
+        self.assertEqual(sleep.await_args_list, [call(5), call(15), call(45), call(120)])
+        self.assertGreater(sum(app.FINAL_RETRY_DELAYS), 10 * sum(app.LIVE_RETRY_DELAYS))
 
     async def test_missing_anthropic_key_does_not_send_request(self):
         with patch.object(app, "ANTHROPIC_API_KEY", ""):
@@ -139,6 +192,135 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ANTHROPIC_API_KEY", str(result))
         self.assertEqual(requests, [])
         sleep.assert_not_awaited()
+
+
+class FinalizeTests(unittest.TestCase):
+    SESSION = "20260908_090321"
+
+    def setUp(self):
+        output = tempfile.TemporaryDirectory()
+        self.addCleanup(output.cleanup)
+        self.output = Path(output.name)
+        self.session_dir = self.output / self.SESSION
+        self.session_dir.mkdir()
+        for target, value in (("OUTPUT_DIR", self.output), ("ANTHROPIC_API_KEY", "test-key")):
+            patcher = patch.object(app, target, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def write_session(self, session_id=None, status=app.FINAL_STATUS_FAILED, material=True):
+        directory = self.output / (session_id or self.SESSION)
+        directory.mkdir(exist_ok=True)
+        (directory / "session.json").write_text(json.dumps({
+            "session_id": directory.name, "course_title": "機器學習",
+            "started_at": directory.name, "final_notes_status": status,
+        }, ensure_ascii=False), encoding="utf-8")
+        (directory / "final_notes.md").write_text(
+            "# 機器學習\n\n最終整併失敗：RuntimeError: boom\n", encoding="utf-8")
+        if material:
+            (directory / "finalize_input.json").write_text(json.dumps({
+                "course_title": "機器學習", "chapters": "## 章節摘要 A",
+                "remaining": "### 尚未整併的一段",
+            }, ensure_ascii=False), encoding="utf-8")
+
+    @contextmanager
+    def anthropic(self, *responses):
+        prompts = []
+        outcomes = iter(responses)
+        real_client = httpx.AsyncClient
+
+        def respond(request):
+            prompts.append(json.loads(request.content)["messages"][0]["content"])
+            outcome = next(outcomes)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        with patch.object(app.httpx, "AsyncClient", side_effect=lambda **kw: real_client(
+                transport=httpx.MockTransport(respond), **kw)), \
+                patch.object(app, "FINAL_RETRY_DELAYS", (0, 0, 0, 0)):
+            yield prompts
+
+    def status(self):
+        return json.loads((self.session_dir / "session.json").read_text(encoding="utf-8"))
+
+    def test_rerun_replaces_the_fallback_and_clears_the_failed_status(self):
+        self.write_session()
+        with self.anthropic(stream_response(["# 机器学习\n\n## 本堂课总览\n\n- 类别变项"])) as prompts, \
+                TestClient(app.app) as client:
+            response = client.post(f"/finalize/{self.SESSION}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("類別變項", response.json()["text"])
+        self.assertIn("<h1>機器學習</h1>", response.json()["html"])
+        notes = (self.session_dir / "final_notes.md").read_text(encoding="utf-8")
+        self.assertIn("類別變項", notes)
+        self.assertNotIn("最終整併失敗", notes)
+        self.assertEqual(self.status()["final_notes_status"], app.FINAL_STATUS_OK)
+        # The re-run reads the saved material, never the fallback notes it is replacing.
+        self.assertIn("## 章節摘要 A", prompts[0])
+        self.assertIn("### 尚未整併的一段", prompts[0])
+        self.assertNotIn("最終整併失敗", prompts[0])
+
+    def test_rerun_without_saved_material_is_not_offered(self):
+        self.write_session(material=False)
+        with TestClient(app.app) as client:
+            self.assertEqual(client.post(f"/finalize/{self.SESSION}").status_code, 404)
+
+    def test_rerun_rejects_malformed_session_ids(self):
+        with TestClient(app.app) as client:
+            for bad in ("not-a-session", "2026_0908", "20260908"):
+                with self.subTest(session_id=bad):
+                    self.assertEqual(client.post(f"/finalize/{bad}").status_code, 404)
+
+    def test_failed_rerun_keeps_the_fallback_and_the_failed_status(self):
+        self.write_session()
+        with self.anthropic(*[httpx.Response(503) for _ in range(5)]), TestClient(app.app) as client:
+            response = client.post(f"/finalize/{self.SESSION}")
+
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("HTTP 503", response.json()["detail"])
+        self.assertEqual(self.status()["final_notes_status"], app.FINAL_STATUS_FAILED)
+        self.assertIn("最終整併失敗",
+                      (self.session_dir / "final_notes.md").read_text(encoding="utf-8"))
+
+    def test_incomplete_lists_only_failed_sessions_that_can_still_be_merged(self):
+        self.write_session()
+        self.write_session("20260908_100000", status=app.FINAL_STATUS_OK)
+        self.write_session("20260908_110000", material=False)
+        with TestClient(app.app) as client:
+            sessions = client.get("/sessions/incomplete").json()["sessions"]
+        self.assertEqual([s["session_id"] for s in sessions], [self.SESSION])
+        self.assertEqual(sessions[0]["course_title"], "機器學習")
+
+
+class BackgroundFinalizeTests(unittest.IsolatedAsyncioTestCase):
+    @contextmanager
+    def finalize_returning(self, *outcomes, delays=(0, 0, 0)):
+        with patch.object(app, "BACKGROUND_RETRY_DELAYS", delays), \
+                patch.object(app, "finalize_session", new_callable=AsyncMock) as finalize:
+            finalize.side_effect = list(outcomes)
+            yield finalize
+
+    async def test_background_retry_stops_at_the_first_success(self):
+        with self.finalize_returning(RuntimeError("still offline"), "筆記",
+                                     RuntimeError("never reached")) as finalize:
+            await app.retry_finalize_in_background("20260908_090321")
+        self.assertEqual(finalize.await_count, 2)
+
+    async def test_background_retry_gives_up_after_the_last_delay(self):
+        with self.finalize_returning(*[RuntimeError("still offline")] * 3) as finalize:
+            await app.retry_finalize_in_background("20260908_090321")
+        self.assertEqual(finalize.await_count, 3)
+
+    async def test_spawned_task_is_referenced_so_it_is_not_garbage_collected(self):
+        with self.finalize_returning("筆記") as finalize:
+            app.spawn_background_finalize("20260908_090321")
+            self.assertEqual(len(app._background_tasks), 1)
+            await asyncio.sleep(0)
+            await asyncio.gather(*app._background_tasks)
+        self.assertEqual(finalize.await_count, 1)
+        self.assertEqual(app._background_tasks, set())
 
 
 class ConfigurationTests(unittest.TestCase):
