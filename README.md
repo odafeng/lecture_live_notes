@@ -6,6 +6,21 @@
 
 輸出是四個檔案：錄音 `lecture.wav`、逐字稿 `transcript.txt`、上課當下逐段產生的 `live_notes.md`、下課後整併的 `final_notes.md`。所有中文都經 OpenCC 轉成臺灣正體，英文術語保留原文。
 
+## 你需要先自備兩把 API key
+
+**這個專案不含任何 API 額度，也不代收費用。** 跑起來之前，你得自己去申請兩把 key，填進 `.env`：
+
+| Key | 用途 | 申請位置 |
+|---|---|---|
+| `GEMINI_API_KEY` | 即時語音辨識 | [Google AI Studio](https://aistudio.google.com/) 的 API Keys 頁面 |
+| `ANTHROPIC_API_KEY` | 把逐字稿整理成筆記 | [Anthropic Console](https://platform.claude.com/) |
+
+兩邊都是**用量計費**，帳單直接來自 Google 和 Anthropic。費率與免費額度以兩家官方公告為準，開始用之前請自己確認一次目前的方案。粗略的用量結構見下方「費用怎麼算」。
+
+沒有這兩把 key，App 會在你按下「開始上課」之前就直接擋下來並顯示錯誤，不會空跑。申請的逐步畫面說明在第 4 節。
+
+金鑰只放在本機 `.env`，只由 Python 後端讀取，不會出現在前端頁面，也已排除在版本控制外。
+
 ## 這適合誰
 
 寫來解決一個具體問題：全英語授課、講很快、術語密集的研究所課程，聽的當下抄不完，事後回聽兩小時錄音又太慢。
@@ -45,13 +60,13 @@ Claude Haiku 4.5 的定價是每百萬 token 輸入 US$1、輸出 US$5。實測�
 
 ## 五分鐘上手
 
-需要 Python 3.10 以上、一支麥克風，以及 Gemini 和 Anthropic 兩個 API key。
+需要 Python 3.10 以上、一支麥克風，以及上面說的**兩把自備 API key**。沒有 key 的話先去申請，不然跑到第四步就會卡住。
 
 ```bash
 git clone https://github.com/odafeng/lecture_live_notes.git
 cd lecture_live_notes
 python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
-cp .env.example .env      # 填入兩個 API key
+cp .env.example .env      # 用編輯器打開，填入 GEMINI_API_KEY 與 ANTHROPIC_API_KEY
 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
