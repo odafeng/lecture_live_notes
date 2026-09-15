@@ -102,7 +102,7 @@ class BrowserTests(unittest.TestCase):
                     expect(page.locator("#final h1")).to_have_text("機器學習")
                     expect(page.locator("#final strong")).to_have_text("重點")
                     expect(page.locator("#final table")).to_have_count(1)
-                    expect(page.locator("#downloads a")).to_have_count(5)
+                    expect(page.locator("#downloads a")).to_have_count(7)
                     expect(page.locator("#final img, #final script, #final a[href^='javascript:']")).to_have_count(0)
                     self.assertIsNone(page.evaluate("window.injected"))
                     self.assertTrue(page.evaluate("window.testInputStream.getTracks().every(t => t.readyState === 'ended')"))
@@ -113,6 +113,48 @@ class BrowserTests(unittest.TestCase):
                     self.assertIn("**重點**", content)
                     self.assertNotIn("<h1>", content)
                     self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width)
+
+    def test_writing_a_note_and_a_correction_during_class(self):
+        with tempfile.TemporaryDirectory() as output, fake_services(output), running_server() as url, \
+                browser_page(url) as page:
+            page.locator("#courseTitle").fill("机器学习")
+            expect(page.locator("#noteInput")).to_be_disabled()
+            page.get_by_role("button", name="開始上課", exact=True).click()
+            expect(page.locator("body")).to_have_attribute("data-phase", "recording")
+
+            expect(page.locator("#noteInput")).to_be_enabled()
+            page.locator("#noteInput").fill("这页会考")
+            page.locator("#noteInput").press("Enter")
+            expect(page.locator("#notes")).to_contain_text("✍️")
+            expect(page.locator("#notes")).to_contain_text("這頁會考")
+            expect(page.locator("#noteInput")).to_have_value("")
+            # A handwritten note is not one of the generated blocks, so the count stays put.
+            expect(page.locator("#noteCount")).to_have_text("0 段筆記")
+
+            page.locator("#noteKindCorrection").click()
+            expect(page.locator("#noteKindCorrection")).to_have_attribute("aria-pressed", "true")
+            expect(page.locator("#noteKindNote")).to_have_attribute("aria-pressed", "false")
+            page.locator("#noteInput").fill("老师说的是 ResNet")
+            page.locator("#noteInput").press("Enter")
+            expect(page.locator("#notes")).to_contain_text("⟲ 更正")
+
+            page.get_by_role("button", name="下課／停止").click()
+            expect(page.locator("#noteInput")).to_be_disabled()
+            expect(page.locator("#finalPanel")).to_be_visible(timeout=15000)
+            expect(page.locator("#final")).to_contain_text("我的課堂筆記（原文）")
+            expect(page.locator("#final")).to_contain_text("這頁會考")
+            expect(page.get_by_role("link", name="整包下載", exact=True)).to_be_visible()
+            expect(page.get_by_role("link", name="完整筆記 HTML", exact=True)).to_be_visible()
+
+    def test_blank_note_is_not_sent(self):
+        with tempfile.TemporaryDirectory() as output, fake_services(output), running_server() as url, \
+                browser_page(url) as page:
+            page.get_by_role("button", name="開始上課", exact=True).click()
+            expect(page.locator("#noteInput")).to_be_enabled()
+            page.locator("#noteInput").fill("   ")
+            page.locator("#noteInput").press("Enter")
+            expect(page.locator("#notesEmpty")).to_be_visible()
+            expect(page.locator("#noteInput")).to_have_value("   ")
 
     def test_failed_merge_can_be_rerun_from_the_finished_lecture(self):
         with tempfile.TemporaryDirectory() as output, fake_services(output) as requests, \

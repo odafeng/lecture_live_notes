@@ -1,11 +1,14 @@
 import asyncio
 import base64
+import html
 import json
 import logging
 import os
 import re
+import tempfile
 import time
 import wave
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -18,6 +21,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 from opencc import OpenCC
+from starlette.background import BackgroundTask
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -36,6 +40,13 @@ TRANSCRIPTION_MODE = os.getenv("TRANSCRIPTION_MODE", "SMART").upper()
 DEFAULT_CUSTOM_VOCABULARY = [
     x.strip() for x in os.getenv("CUSTOM_VOCABULARY", "").split(",") if x.strip()
 ]
+
+# One typed line per entry, so the cap only has to stop a runaway paste.
+USER_NOTE_MAX_CHARS = 2000
+USER_NOTES_HEADING = "## 我的課堂筆記（原文）"
+USER_NOTE_MARKERS = {"note": "✍️", "correction": "⟲ 更正"}
+BUNDLE_FILES = ("final_notes.md", "final_notes.html", "live_notes.md",
+                "transcript.txt", "lecture.wav", "session.json")
 
 NOTE_WINDOW_SECONDS = int(os.getenv("NOTE_WINDOW_SECONDS", "60"))
 ROLLUP_EVERY_BLOCKS = int(os.getenv("ROLLUP_EVERY_BLOCKS", "10"))
@@ -96,7 +107,20 @@ def dedupe_terms(terms: list[str], limit: int = 100) -> list[str]:
     return result
 
 
-def lecture_note_prompt(text: str, start_ts: str, end_ts: str) -> str:
+def corrections_block(corrections: list[str]) -> str:
+    """Corrections are instructions, not material: they override whatever the model read earlier."""
+    if not corrections:
+        return ""
+    lines = "\n".join(f"- {c}" for c in corrections)
+    return (
+        "\n使用者更正（上課者本人當場輸入。這些更正的優先度高於逐字稿與先前的筆記；"
+        "遇到衝突一律以更正為準，並依更正改寫受影響的內容。不要在輸出中重述這段說明）：\n"
+        f"{lines}\n"
+    )
+
+
+def lecture_note_prompt(text: str, start_ts: str, end_ts: str,
+                        corrections: list[str] | None = None) -> str:
     return f"""
 你正在替一堂大學課程製作『即時課堂筆記』。
 以下是 {start_ts}–{end_ts} 的逐字稿片段。
@@ -109,7 +133,7 @@ def lecture_note_prompt(text: str, start_ts: str, end_ts: str) -> str:
 - 老師如果明確說「重要、會考、記住、重點」或反覆強調，請記錄。
 - 所有中文一律使用繁體中文（臺灣正體），禁止簡體字；英文術語保留原文。
 - 不需要把逐字稿重新抄一次。
-
+{corrections_block(corrections or [])}
 逐字稿：
 {text}
 
@@ -124,7 +148,7 @@ def lecture_note_prompt(text: str, start_ts: str, end_ts: str) -> str:
 """.strip()
 
 
-def rollup_prompt(blocks: str, range_label: str) -> str:
+def rollup_prompt(blocks: str, range_label: str, corrections: list[str] | None = None) -> str:
     return f"""
 你正在整理一堂長時間大學課程。以下是 {range_label} 的多個分鐘級課堂筆記區塊。
 請把它們壓縮成一個『章節摘要』，以便之後整合整堂課。
@@ -134,7 +158,7 @@ def rollup_prompt(blocks: str, range_label: str) -> str:
 - 合併重複內容，但不要丟掉定義、公式、重要數字、因果關係、老師明示的重要事項。
 - 保留任何 [待確認]。
 - 所有中文一律使用繁體中文（臺灣正體），禁止簡體字；英文術語保留原文。
-
+{corrections_block(corrections or [])}
 筆記區塊：
 {blocks}
 
@@ -152,7 +176,10 @@ def rollup_prompt(blocks: str, range_label: str) -> str:
 """.strip()
 
 
-def final_prompt(chapters: str, remaining_blocks: str, course_title: str) -> str:
+def final_prompt(chapters: str, remaining_blocks: str, course_title: str,
+                 user_notes: list[str] | None = None,
+                 corrections: list[str] | None = None) -> str:
+    handwritten = "\n".join(f"- {n}" for n in (user_notes or [])) or "(無)"
     return f"""
 請根據以下課堂摘要素材，整理成一份可複習的完整上課筆記。
 課程：{course_title or '未命名課程'}
@@ -163,6 +190,11 @@ def final_prompt(chapters: str, remaining_blocks: str, course_title: str) -> str
 - 保留重要定義、公式、數字、因果關係、例子與專有名詞。
 - 所有 [待確認] 必須保留在最後的待釐清清單。
 - 所有中文一律使用繁體中文（臺灣正體），禁止簡體字；英文術語保留原文。條理清楚，適合考前複習。
+- 不要自行輸出「我的課堂筆記」章節；那一段由系統原文附加。
+{corrections_block(corrections or [])}
+使用者手寫筆記（上課者本人在課堂當下記下的。可信度高於自動整理的推測，
+必須整合進對應段落，且不得改寫其判斷 —— 他寫「會考」就是會考）：
+{handwritten}
 
 章節摘要：
 {chapters or '(尚無章節摘要)'}
@@ -179,6 +211,50 @@ def final_prompt(chapters: str, remaining_blocks: str, course_title: str) -> str
 ## 老師特別強調或明示考點
 ## 待釐清事項
 """.strip()
+
+
+def append_user_notes_section(notes: str, user_notes: list[str]) -> str:
+    """Appended here rather than asked of the model, so nothing handwritten can be paraphrased away."""
+    if not user_notes:
+        return notes
+    lines = "\n".join(f"- {n}" for n in user_notes)
+    return f"{notes.rstrip()}\n\n{USER_NOTES_HEADING}\n\n{lines}"
+
+
+NOTES_DOCUMENT_CSS = """
+:root { color-scheme: light; }
+body { margin: 0; background: #f7f7f2; color: #414c43; font-size: 16px; line-height: 1.75;
+  font-family: "Avenir Next", "PingFang TC", "Microsoft JhengHei", sans-serif; }
+main { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+h1, h2, h3, h4 { color: #283d33; font-family: "Iowan Old Style", "Songti TC", "Noto Serif TC", serif;
+  font-weight: 500; line-height: 1.4; }
+h1 { font-size: 2rem; margin: 0 0 2rem; padding-bottom: .75rem; border-bottom: 1px solid #dce0d4; }
+h2 { font-size: 1.35rem; margin: 2.5rem 0 .75rem; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 .5rem; }
+ul, ol { padding-left: 1.4rem; }
+li { margin: .35rem 0; }
+strong { color: #283d33; }
+code { background: #eeefe7; border-radius: 4px; padding: .1em .35em; font-size: .9em; }
+blockquote { margin: 1rem 0; padding: .5rem 1rem; border-left: 3px solid #c2d0b6;
+  background: #fffefa; color: #606d57; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; display: block; overflow-x: auto; }
+th, td { border: 1px solid #dce0d4; padding: .5rem .7rem; text-align: left; }
+th { background: #eeefe7; }
+hr { border: 0; border-top: 1px solid #dce0d4; margin: 2.5rem 0; }
+@media print { body { background: #fff; } main { padding: 0; max-width: none; } }
+"""
+
+
+def render_notes_document(course_title: str, notes: str) -> str:
+    """A standalone page: no network, no sibling files, so it survives being emailed or printed."""
+    title = html.escape(course_title.strip() or "課堂筆記")
+    return (
+        "<!doctype html>\n"
+        '<html lang="zh-Hant">\n<head>\n<meta charset="utf-8" />\n'
+        '<meta name="viewport" content="width=device-width,initial-scale=1" />\n'
+        f"<title>{title}</title>\n<style>{NOTES_DOCUMENT_CSS}</style>\n</head>\n"
+        f"<body>\n<main>\n{MARKDOWN.render(notes)}</main>\n</body>\n</html>\n"
+    )
 
 
 class AnthropicStreamError(Exception):
@@ -278,6 +354,7 @@ def session_paths(session_id: str):
         "transcript": session_dir / "transcript.txt",
         "notes": session_dir / "live_notes.md",
         "final": session_dir / "final_notes.md",
+        "final_html": session_dir / "final_notes.html",
         "meta": session_dir / "session.json",
         "finalize_input": session_dir / "finalize_input.json",
     }
@@ -299,6 +376,12 @@ def final_fallback_notes(course_title: str, chapters: str, remaining: str, error
     )
 
 
+def write_final_outputs(paths: dict[str, Path], course_title: str, notes: str) -> None:
+    """Markdown stays the source of truth; the HTML is the copy that reads and prints anywhere."""
+    paths["final"].write_text(notes + "\n", encoding="utf-8")
+    paths["final_html"].write_text(render_notes_document(course_title, notes), encoding="utf-8")
+
+
 def set_final_status(session_id: str, status: str) -> None:
     """Record whether final_notes.md holds a real merge or the raw fallback."""
     meta_path = session_paths(session_id)["meta"]
@@ -314,12 +397,15 @@ async def finalize_session(session_id: str) -> str:
     """Re-run the final merge from saved material and overwrite final_notes.md."""
     paths = session_paths(session_id)
     material = json.loads(paths["finalize_input"].read_text(encoding="utf-8"))
+    course_title = material.get("course_title", "")
+    user_notes = material.get("user_notes") or []
     notes = await call_anthropic_text(
         final_prompt(material.get("chapters", ""), material.get("remaining", ""),
-                     material.get("course_title", "")),
+                     course_title, user_notes, material.get("corrections") or []),
         retry_delays=FINAL_RETRY_DELAYS,
     )
-    paths["final"].write_text(notes + "\n", encoding="utf-8")
+    notes = append_user_notes_section(notes, user_notes)
+    write_final_outputs(paths, course_title, notes)
     set_final_status(session_id, FINAL_STATUS_OK)
     return notes
 
@@ -380,9 +466,47 @@ async def incomplete_sessions():
     return {"sessions": sessions}
 
 
+def bundle_filename(session_id: str) -> str:
+    """Named after the lecture, so a folder of downloads stays readable."""
+    title = ""
+    try:
+        meta = json.loads(session_paths(session_id)["meta"].read_text(encoding="utf-8"))
+        title = str(meta.get("course_title", ""))
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass
+    slug = re.sub(r'[\\/:*?"<>|]+', "", normalize_text(title))[:60].strip()
+    return f"{slug}_{session_id}.zip" if slug else f"lecture_{session_id}.zip"
+
+
+@app.get("/bundle/{session_id}")
+async def bundle(session_id: str):
+    """Everything this lecture produced, in one file."""
+    if not re.fullmatch(SESSION_ID_PATTERN, session_id):
+        raise HTTPException(status_code=404)
+    session_dir = session_dir_for(session_id)
+    present = [name for name in BUNDLE_FILES if (session_dir / name).exists()]
+    if not present:
+        raise HTTPException(status_code=404)
+
+    # Zipped to a temp file rather than memory: an hour of lecture audio is not small.
+    archive = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    archive.close()
+    try:
+        with zipfile.ZipFile(archive.name, "w", zipfile.ZIP_DEFLATED) as bundled:
+            for name in present:
+                bundled.write(session_dir / name, arcname=name)
+    except BaseException:
+        os.unlink(archive.name)
+        raise
+    return FileResponse(archive.name, media_type="application/zip",
+                        filename=bundle_filename(session_id),
+                        background=BackgroundTask(os.unlink, archive.name))
+
+
 @app.get("/download/{session_id}/{filename}")
 async def download(session_id: str, filename: str):
-    allowed = {"lecture.wav", "transcript.txt", "live_notes.md", "final_notes.md", "session.json"}
+    allowed = {"lecture.wav", "transcript.txt", "live_notes.md", "final_notes.md",
+               "final_notes.html", "session.json"}
     if not re.fullmatch(r"\d{8}_\d{6}", session_id) or filename not in allowed:
         raise HTTPException(status_code=404)
     path = session_dir_for(session_id) / filename
@@ -479,6 +603,9 @@ async def websocket_endpoint(ws: WebSocket):
 
     note_blocks: list[str] = []
     chapter_summaries: list[str] = []
+    # Typed by the person in the room: notes become review material, corrections steer the model.
+    user_notes: list[str] = []
+    corrections: list[str] = []
 
     await safe_send({"type": "session", "session_id": session_id})
     await safe_send({
@@ -704,7 +831,8 @@ async def websocket_endpoint(ws: WebSocket):
             end_ts = format_elapsed(last_elapsed)
 
             try:
-                block = await call_anthropic_text(lecture_note_prompt(text, start_ts, end_ts))
+                block = await call_anthropic_text(
+                    lecture_note_prompt(text, start_ts, end_ts, corrections))
             except Exception as e:
                 block = TRADITIONAL_CHINESE.convert(
                     f"### {start_ts}–{end_ts}\n"
@@ -726,7 +854,8 @@ async def websocket_endpoint(ws: WebSocket):
                 del note_blocks[:ROLLUP_EVERY_BLOCKS]
                 range_label = f"截至 {end_ts}"
                 try:
-                    chapter = await call_anthropic_text(rollup_prompt("\n\n".join(group), range_label))
+                    chapter = await call_anthropic_text(
+                        rollup_prompt("\n\n".join(group), range_label, corrections))
                     chapter_summaries.append(chapter)
                     await safe_send({"type": "chapter", "text": chapter})
                 except Exception as e:
@@ -783,6 +912,18 @@ async def websocket_endpoint(ws: WebSocket):
                         with paths["notes"].open("a", encoding="utf-8") as f:
                             f.write(marker + "\n\n")
                     await safe_send({"type": "marker", "text": marker})
+                elif msg_type == "user_note":
+                    kind = "correction" if payload.get("kind") == "correction" else "note"
+                    text = normalize_text(TRADITIONAL_CHINESE.convert(
+                        str(payload.get("text", ""))))[:USER_NOTE_MAX_CHARS]
+                    if text:
+                        entry = f"[{format_elapsed(await get_audio_elapsed())}] {text}"
+                        (corrections if kind == "correction" else user_notes).append(entry)
+                        display = f"{USER_NOTE_MARKERS[kind]} {entry}"
+                        async with notes_file_lock:
+                            with paths["notes"].open("a", encoding="utf-8") as f:
+                                f.write(f"> {display}\n\n")
+                        await safe_send({"type": "user_note", "kind": kind, "text": display})
                 elif msg_type == "stop":
                     stopped = True
 
@@ -823,18 +964,22 @@ async def websocket_endpoint(ws: WebSocket):
         chapters = "\n\n".join(chapter_summaries)
         # Written before the merge runs so a failed session can be re-merged without the websocket.
         paths["finalize_input"].write_text(json.dumps(
-            {"course_title": course_title, "chapters": chapters, "remaining": remaining},
+            {"course_title": course_title, "chapters": chapters, "remaining": remaining,
+             "user_notes": user_notes, "corrections": corrections},
             ensure_ascii=False, indent=2), encoding="utf-8")
 
         final_status = FINAL_STATUS_OK
         try:
             final_notes = await call_anthropic_text(
-                final_prompt(chapters, remaining, course_title), retry_delays=FINAL_RETRY_DELAYS)
+                final_prompt(chapters, remaining, course_title, user_notes, corrections),
+                retry_delays=FINAL_RETRY_DELAYS)
         except Exception as e:
             final_status = FINAL_STATUS_FAILED
             final_notes = final_fallback_notes(course_title, chapters, remaining, e)
 
-        paths["final"].write_text(final_notes + "\n", encoding="utf-8")
+        # Appended on both paths: a failed merge must not cost the user their own words.
+        final_notes = append_user_notes_section(final_notes, user_notes)
+        write_final_outputs(paths, course_title, final_notes)
         duration = await get_audio_elapsed()
         meta = {
             "session_id": session_id,
@@ -846,6 +991,8 @@ async def websocket_endpoint(ws: WebSocket):
             "summary_model": SUMMARY_MODEL,
             "transcription_mode": transcription_mode,
             "custom_vocabulary": custom_vocabulary,
+            "user_note_count": len(user_notes),
+            "correction_count": len(corrections),
             "note_window_seconds": NOTE_WINDOW_SECONDS,
             "gemini_session_rotate_seconds": SESSION_ROTATE_SECONDS,
             "disconnected": disconnected,
@@ -867,7 +1014,9 @@ async def websocket_endpoint(ws: WebSocket):
                     "transcript": f"/download/{session_id}/transcript.txt",
                     "live_notes": f"/download/{session_id}/live_notes.md",
                     "final_notes": f"/download/{session_id}/final_notes.md",
+                    "final_html": f"/download/{session_id}/final_notes.html",
                     "metadata": f"/download/{session_id}/session.json",
+                    "bundle": f"/bundle/{session_id}",
                 },
             })
             await safe_send({"type": "status", "text": "本堂課筆記整理完成。"})

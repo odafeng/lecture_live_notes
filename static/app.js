@@ -11,6 +11,7 @@ let autoScroll = true;
 let transcriptCount = 0;
 let noteCount = 0;
 let currentSessionId = null;
+let noteKind = "note";
 
 const $ = id => document.getElementById(id);
 const startBtn = $("startBtn"), stopBtn = $("stopBtn"), markBtn = $("markBtn");
@@ -19,6 +20,7 @@ const courseTitleEl = $("courseTitle"), customVocabularyEl = $("customVocabulary
 const transcriptEl = $("transcript"), interimEl = $("interim"), notesEl = $("notes");
 const finalPanel = $("finalPanel"), finalEl = $("final"), downloadsEl = $("downloads");
 const remergeBtn = $("remergeBtn"), recoveryEl = $("recovery"), recoveryBtn = $("recoveryBtn");
+const noteComposer = $("noteComposer"), noteInput = $("noteInput"), noteSendBtn = $("noteSendBtn");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 $("todayDate").textContent = new Intl.DateTimeFormat("zh-TW", {month: "long", day: "numeric", weekday: "long"}).format(new Date());
@@ -35,6 +37,8 @@ function setPhase(next) {
   stopBtn.hidden = next !== "recording";
   stopBtn.disabled = next !== "recording";
   markBtn.disabled = next !== "recording";
+  noteInput.disabled = next !== "recording";
+  noteSendBtn.disabled = next !== "recording";
   courseTitleEl.disabled = busy;
   customVocabularyEl.disabled = busy;
   transcriptionModeEl.disabled = busy;
@@ -98,9 +102,9 @@ function scrollToLatest(el) {
     container.scrollTop = container.scrollHeight;
   }
 }
-function appendAndScroll(el, text) {
+function appendAndScroll(el, text, variant = "") {
   const entry = document.createElement("div");
-  entry.className = "text-entry";
+  entry.className = variant ? `text-entry ${variant}` : "text-entry";
   entry.textContent = text;
   el.appendChild(entry);
   if (el === notesEl) $("notesEmpty").hidden = true;
@@ -145,7 +149,7 @@ function settleReady(error) {
 }
 function renderDownloads(files) {
   downloadsEl.replaceChildren();
-  const labels = {final_notes: ["完整筆記", "MD"], live_notes: ["即時筆記", "MD"], transcript: ["逐字稿", "TXT"], audio: ["錄音 WAV", "WAV"], metadata: ["課堂資訊", "JSON"]};
+  const labels = {final_notes: ["完整筆記", "MD"], final_html: ["完整筆記 HTML", "HTML"], bundle: ["整包下載", "ZIP"], live_notes: ["即時筆記", "MD"], transcript: ["逐字稿", "TXT"], audio: ["錄音 WAV", "WAV"], metadata: ["課堂資訊", "JSON"]};
   for (const [key, [label, type]] of Object.entries(labels)) {
     if (!files[key]) continue;
     const a = document.createElement("a");
@@ -226,6 +230,8 @@ function handleMessage(event) {
     if (msg.text) { $("transcriptEmpty").hidden = true; scrollToLatest(transcriptEl); }
   }
   if (msg.type === "note_block") appendMarkdown(msg.html);
+  // Handwritten entries are the user's own words, so they render as text and never bump the block count.
+  if (msg.type === "user_note") appendAndScroll(notesEl, msg.text, `entry-${msg.kind === "correction" ? "correction" : "note"}`);
   if (msg.type === "marker") appendAndScroll(notesEl, msg.text.replace(/^>\s*/, ""));
   if (msg.type === "chapter") appendAndScroll(notesEl, "✓ 已完成背景章節整併");
   if (msg.type === "summary_error") { showNotice(msg.text); appendAndScroll(notesEl, msg.text); }
@@ -258,6 +264,7 @@ function resetWorkspace() {
   transcriptCount = 0; noteCount = 0;
   $("transcriptCount").textContent = "0 段"; $("noteCount").textContent = "0 段筆記";
   timerEl.textContent = "00:00:00";
+  noteInput.value = "";
   $("workspaceTitle").textContent = courseTitleEl.value.trim() || "今天，專心上課。";
 }
 async function releaseAudio() {
@@ -358,6 +365,25 @@ startBtn.addEventListener("click", () => startRecording().catch(async error => {
 stopBtn.addEventListener("click", () => stopRecording().catch(error => { showNotice(`停止錄音時發生問題：${error.message}`); }));
 markBtn.addEventListener("click", () => {
   if (recording && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type: "mark"}));
+});
+function setNoteKind(kind) {
+  noteKind = kind;
+  $("noteKindNote").setAttribute("aria-pressed", String(kind === "note"));
+  $("noteKindCorrection").setAttribute("aria-pressed", String(kind === "correction"));
+  noteInput.placeholder = kind === "correction" ? "AI 寫錯了什麼？按 Enter 送出" : "寫下你的想法，按 Enter 送出";
+  $("composerHelp").textContent = kind === "correction"
+    ? "更正會套用到後續的整理，也會在下課整併時修正先前寫錯的段落。"
+    : "會寫進這堂課的筆記，也會進最終的完整筆記。";
+}
+$("noteKindNote").addEventListener("click", () => setNoteKind("note"));
+$("noteKindCorrection").addEventListener("click", () => setNoteKind("correction"));
+noteComposer.addEventListener("submit", event => {
+  event.preventDefault();
+  const text = noteInput.value.trim();
+  // A blank entry would leave the server silent, so it never leaves the browser.
+  if (!text || !recording || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({type: "user_note", kind: noteKind, text}));
+  noteInput.value = "";
 });
 $("followBtn").addEventListener("click", () => {
   autoScroll = !autoScroll;

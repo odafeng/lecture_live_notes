@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 from contextlib import contextmanager
@@ -6,6 +7,7 @@ from pathlib import Path
 import runpy
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import AsyncMock, call, patch
 
 import httpx
@@ -194,6 +196,67 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         sleep.assert_not_awaited()
 
 
+class UserInputTests(unittest.TestCase):
+    NOTE = "[00:12:35] 老師說這頁會考"
+    CORRECTION = "[00:20:01] 老師說的是 ResNet，不是 resonate"
+
+    def test_handwritten_notes_reach_the_final_prompt_as_priority_material(self):
+        prompt = app.final_prompt("章節摘要", "尚未整併", "機器學習", [self.NOTE], [])
+        self.assertIn(self.NOTE, prompt)
+        self.assertIn("手寫筆記", prompt)
+
+    def test_final_notes_keep_the_handwritten_section_verbatim(self):
+        notes = app.append_user_notes_section("# 機器學習\n\n## 本堂課總覽\n", [self.NOTE])
+        self.assertIn(app.USER_NOTES_HEADING, notes)
+        self.assertIn(f"- {self.NOTE}", notes)
+
+    def test_without_handwritten_notes_no_section_is_added(self):
+        self.assertEqual(app.append_user_notes_section("# 機器學習\n", []), "# 機器學習\n")
+
+    def test_corrections_steer_every_later_generation(self):
+        for stage, prompt in {
+            "note": app.lecture_note_prompt("逐字稿", "00:00:00", "00:01:00", [self.CORRECTION]),
+            "rollup": app.rollup_prompt("筆記區塊", "截至 00:10:00", [self.CORRECTION]),
+            "final": app.final_prompt("章節摘要", "尚未整併", "機器學習", [], [self.CORRECTION]),
+        }.items():
+            with self.subTest(stage=stage):
+                self.assertIn(self.CORRECTION, prompt)
+                self.assertIn("使用者更正", prompt)
+
+    def test_prompts_stay_unchanged_when_nothing_was_corrected(self):
+        for stage, prompt in {
+            "note": app.lecture_note_prompt("逐字稿", "00:00:00", "00:01:00", []),
+            "rollup": app.rollup_prompt("筆記區塊", "截至 00:10:00", []),
+            "final": app.final_prompt("章節摘要", "尚未整併", "機器學習", [], []),
+        }.items():
+            with self.subTest(stage=stage):
+                self.assertNotIn("使用者更正", prompt)
+
+    def test_a_correction_steers_the_model_but_is_not_review_material(self):
+        notes = app.append_user_notes_section("# 機器學習\n", [self.NOTE])
+        self.assertNotIn(self.CORRECTION, notes)
+
+
+class NotesDocumentTests(unittest.TestCase):
+    def test_html_output_is_a_standalone_document_carrying_the_rendered_notes(self):
+        document = app.render_notes_document("機器學習", "# 機器學習\n\n- **重點**：變項")
+        self.assertTrue(document.startswith("<!doctype html>"))
+        self.assertIn("<title>機器學習</title>", document)
+        self.assertIn("<strong>重點</strong>", document)
+        # Self-contained: printable and readable with no network and no sibling files.
+        self.assertIn("<style>", document)
+        self.assertNotIn("<link", document)
+        self.assertNotIn("<script", document)
+
+    def test_html_output_escapes_a_title_that_looks_like_markup(self):
+        document = app.render_notes_document("<script>x</script>", "# 課")
+        self.assertNotIn("<script>x</script>", document)
+        self.assertIn("&lt;script&gt;", document)
+
+    def test_untitled_lecture_still_gets_a_document_title(self):
+        self.assertIn("<title>課堂筆記</title>", app.render_notes_document("", "# 課"))
+
+
 class FinalizeTests(unittest.TestCase):
     SESSION = "20260908_090321"
 
@@ -209,7 +272,8 @@ class FinalizeTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def write_session(self, session_id=None, status=app.FINAL_STATUS_FAILED, material=True):
+    def write_session(self, session_id=None, status=app.FINAL_STATUS_FAILED, material=True,
+                      user_notes=(), corrections=()):
         session_id = session_id or self.SESSION
         date, clock = session_id.split("_")
         directory = self.output / date / clock
@@ -224,6 +288,7 @@ class FinalizeTests(unittest.TestCase):
             (directory / "finalize_input.json").write_text(json.dumps({
                 "course_title": "機器學習", "chapters": "## 章節摘要 A",
                 "remaining": "### 尚未整併的一段",
+                "user_notes": list(user_notes), "corrections": list(corrections),
             }, ensure_ascii=False), encoding="utf-8")
 
     @contextmanager
@@ -286,6 +351,81 @@ class FinalizeTests(unittest.TestCase):
         self.assertEqual(self.status()["final_notes_status"], app.FINAL_STATUS_FAILED)
         self.assertIn("最終整併失敗",
                       (self.session_dir / "final_notes.md").read_text(encoding="utf-8"))
+
+    def test_rerun_reapplies_handwritten_notes_and_corrections(self):
+        self.write_session(user_notes=["[00:12:35] 老師說這頁會考"],
+                           corrections=["[00:20:01] 老師說的是 ResNet，不是 resonate"])
+        with self.anthropic(stream_response(["# 机器学习\n\n## 本堂课总览\n\n- 类别变项"])) as prompts, \
+                TestClient(app.app) as client:
+            response = client.post(f"/finalize/{self.SESSION}")
+
+        self.assertEqual(response.status_code, 200)
+        # Both survive the round trip through finalize_input.json, so a re-run is not a downgrade.
+        self.assertIn("老師說這頁會考", prompts[0])
+        self.assertIn("ResNet，不是 resonate", prompts[0])
+        notes = (self.session_dir / "final_notes.md").read_text(encoding="utf-8")
+        self.assertIn(app.USER_NOTES_HEADING, notes)
+        self.assertIn("- [00:12:35] 老師說這頁會考", notes)
+
+    def test_rerun_refreshes_the_html_output_alongside_the_markdown(self):
+        self.write_session()
+        (self.session_dir / "final_notes.html").write_text("<p>舊的</p>", encoding="utf-8")
+        with self.anthropic(stream_response(["# 机器学习\n\n## 本堂课总览"])), TestClient(app.app) as client:
+            self.assertEqual(client.post(f"/finalize/{self.SESSION}").status_code, 200)
+        document = (self.session_dir / "final_notes.html").read_text(encoding="utf-8")
+        self.assertNotIn("舊的", document)
+        self.assertIn("<h1>機器學習</h1>", document)
+
+    def test_html_output_can_be_downloaded(self):
+        self.write_session()
+        (self.session_dir / "final_notes.html").write_text("<h1>機器學習</h1>", encoding="utf-8")
+        with TestClient(app.app) as client:
+            response = client.get(f"/download/{self.SESSION}/final_notes.html")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("機器學習", response.text)
+
+    def test_bundle_zips_every_file_the_lecture_produced(self):
+        self.write_session()
+        for name in ("lecture.wav", "transcript.txt", "live_notes.md", "final_notes.html"):
+            (self.session_dir / name).write_text(f"內容 {name}", encoding="utf-8")
+        with TestClient(app.app) as client:
+            response = client.get(f"/bundle/{self.SESSION}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "application/zip")
+        with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
+            self.assertEqual(sorted(bundle.namelist()), sorted(app.BUNDLE_FILES))
+            self.assertEqual(bundle.read("transcript.txt").decode("utf-8"), "內容 transcript.txt")
+        # The download is named after the lecture, not the opaque session id.
+        self.assertIn("20260908", response.headers["content-disposition"])
+
+    def test_bundle_skips_files_the_lecture_never_wrote(self):
+        self.write_session()
+        with TestClient(app.app) as client:
+            response = client.get(f"/bundle/{self.SESSION}")
+        with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
+            self.assertEqual(sorted(bundle.namelist()), ["final_notes.md", "session.json"])
+
+    def test_bundle_filename_survives_an_awkward_course_title(self):
+        for title, expected in (
+            ("機器學習", "機器學習_20260908_090321.zip"),
+            ("A/B: 統計*方法?", "AB 統計方法_20260908_090321.zip"),
+            ("兩行\n標題", "兩行 標題_20260908_090321.zip"),
+            ("", "lecture_20260908_090321.zip"),
+            ("///", "lecture_20260908_090321.zip"),
+        ):
+            with self.subTest(title=title):
+                (self.session_dir / "session.json").write_text(
+                    json.dumps({"course_title": title}, ensure_ascii=False), encoding="utf-8")
+                self.assertEqual(app.bundle_filename(self.SESSION), expected)
+
+    def test_bundle_filename_falls_back_when_metadata_is_unreadable(self):
+        self.assertEqual(app.bundle_filename(self.SESSION), "lecture_20260908_090321.zip")
+
+    def test_bundle_rejects_malformed_and_unknown_sessions(self):
+        with TestClient(app.app) as client:
+            self.assertEqual(client.get("/bundle/not-a-session").status_code, 404)
+            self.assertEqual(client.get("/bundle/20260101_000000").status_code, 404)
 
     def test_a_day_gets_one_folder_holding_each_recording(self):
         self.write_session()
