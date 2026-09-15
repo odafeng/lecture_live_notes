@@ -22,10 +22,13 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
+      # Into .venv, not the runner's Python: the launcher starts the server through
+      # .venv/bin/python, and test_launcher exercises that for real.
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements-dev.txt
 
       # Cached separately from pip: the browser is ~150 MB and changes only with Playwright.
       - name: Cache Playwright browsers
@@ -36,7 +39,7 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('requirements-dev.txt') }}
 
       - name: Install Chromium
-        run: python -m playwright install --with-deps chromium
+        run: .venv/bin/python -m playwright install --with-deps chromium
 
       - name: Run tests
-        run: python -m unittest discover -s tests -t . --verbose
+        run: .venv/bin/python -m unittest discover -s tests -t . --verbose
