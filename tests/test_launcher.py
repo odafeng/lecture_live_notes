@@ -47,8 +47,15 @@ class LauncherTests(unittest.TestCase):
 
     @staticmethod
     def port_left_in_time_wait():
-        """Close an accepted connection from the server side: its local port lands in TIME_WAIT."""
+        """Close an accepted connection from the server side: its local port lands in TIME_WAIT.
+
+        The socket is built the way ensure_server builds its listener, SO_REUSEADDR included,
+        because the port being reclaimed belongs to a server this launcher started. Linux needs
+        the flag on both sockets to allow the rebind (inet_csk_bind_conflict); BSD only needs it
+        on the new one, so leaving it off here passed on macOS and failed on CI.
+        """
         server = socket.socket()
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(("127.0.0.1", 0))
         server.listen()
         port = server.getsockname()[1]
