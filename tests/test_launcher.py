@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import io
 import json
 from pathlib import Path
@@ -43,6 +44,54 @@ class LauncherTests(unittest.TestCase):
                 launcher.ensure_server(runtime_dir=Path(temporary), preferred_port=0)
             process.terminate.assert_called_once()
             process.wait.assert_called_once_with(timeout=5)
+
+    @staticmethod
+    def port_left_in_time_wait():
+        """Close an accepted connection from the server side: its local port lands in TIME_WAIT.
+
+        The socket is built the way ensure_server builds its listener, SO_REUSEADDR included,
+        because the port being reclaimed belongs to a server this launcher started. Linux needs
+        the flag on both sockets to allow the rebind (inet_csk_bind_conflict); BSD only needs it
+        on the new one, so leaving it off here passed on macOS and failed on CI.
+        """
+        server = socket.socket()
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        port = server.getsockname()[1]
+        client = socket.create_connection(("127.0.0.1", port))
+        accepted, _ = server.accept()
+        accepted.close()
+        client.close()
+        server.close()
+        return port
+
+    @contextmanager
+    def started_server(self):
+        """A Popen that stays alive and a port that answers, so ensure_server reaches its happy path."""
+        with patch.object(launcher.subprocess, "Popen",
+                          return_value=MagicMock(poll=lambda: None, pid=4242)), \
+                patch.object(launcher, "server_ready", return_value=True):
+            yield
+
+    def test_restart_keeps_the_port_the_previous_server_left_in_time_wait(self):
+        """A stopped server holds its old port in TIME_WAIT. That is not a reason to move the bookmark."""
+        port = self.port_left_in_time_wait()
+        with tempfile.TemporaryDirectory() as temporary, self.started_server():
+            runtime = Path(temporary)
+            url = launcher.ensure_server(runtime_dir=runtime, preferred_port=port)
+            self.assertEqual(url, f"http://127.0.0.1:{port}")
+            self.assertEqual(json.loads((runtime / "server.json").read_text())["port"], port)
+
+    def test_a_port_another_process_is_listening_on_is_still_skipped(self):
+        """Guards the fix: SO_REUSEADDR must not let a second server share a live port."""
+        with socket.socket() as occupied, tempfile.TemporaryDirectory() as temporary, \
+                self.started_server():
+            occupied.bind(("127.0.0.1", 0))
+            occupied.listen()
+            taken = occupied.getsockname()[1]
+            url = launcher.ensure_server(runtime_dir=Path(temporary), preferred_port=taken)
+            self.assertNotEqual(url, f"http://127.0.0.1:{taken}")
 
     def test_concurrent_launches_use_one_server_and_skip_occupied_port(self):
         children = []

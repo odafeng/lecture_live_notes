@@ -47,6 +47,10 @@ def ensure_server(project_dir=BASE_DIR, runtime_dir=RUNTIME_DIR, preferred_port=
             raise RuntimeError("找不到專案的 Python 環境。請保留 Lecture.app 與 .venv 在原本的專案資料夾內。")
 
         with socket.socket() as listener, log_path.open("a") as log:
+            # A stopped server leaves its port in TIME_WAIT for a minute or two. Without this,
+            # restarting falls through to a random port and the bookmark stops working. It does
+            # not weaken the check below: a port another process is LISTENing on still refuses.
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 listener.bind(("127.0.0.1", preferred_port))
             except OSError as error:
