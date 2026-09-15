@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 import wave
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -69,6 +70,92 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(files["metadata"].json()["summary_model"], "claude-haiku-4-5-20251001")
             with wave.open(io.BytesIO(files["audio"].content)) as recording:
                 self.assertEqual(recording.readframes(recording.getnframes()), pcm)
+
+    def test_handwritten_notes_and_corrections_reach_the_final_notes(self):
+        with tempfile.TemporaryDirectory() as output, fake_services(output) as requests, \
+                TestClient(app.app) as client:
+            messages = []
+            with client.websocket_connect("/ws") as ws:
+                ws.send_json({"type": "meta", "course_title": "机器学习"})
+                receive_until(ws, "ready", messages)
+                # Corrected before the first block exists, so the correction shapes it.
+                ws.send_json({"type": "user_note", "kind": "correction", "text": "老师说的是 ResNet"})
+                correction = receive_until(ws, "user_note", messages)
+                ws.send_bytes(b"\x00\x00" * 1600)
+                receive_until(ws, "note_block", messages)
+                ws.send_json({"type": "user_note", "kind": "note", "text": "这页会考"})
+                note = receive_until(ws, "user_note", messages)
+                ws.send_json({"type": "stop"})
+                final = receive_until(ws, "final", messages)
+                saved = receive_until(ws, "saved", messages)
+
+            self.assertEqual(correction["kind"], "correction")
+            self.assertIn("老師說的是 ResNet", correction["text"])
+            self.assertEqual(note["kind"], "note")
+            self.assertIn("這頁會考", note["text"])
+
+            note_prompt, final_prompt = requests[0], requests[-1]
+            self.assertIn("老師說的是 ResNet", note_prompt)
+            self.assertIn("使用者更正", note_prompt)
+            self.assertIn("這頁會考", final_prompt)
+            self.assertIn("老師說的是 ResNet", final_prompt)
+
+            # The handwritten text is appended by the server, so the model cannot paraphrase it away.
+            self.assertIn(app.USER_NOTES_HEADING, final["text"])
+            self.assertIn("這頁會考", final["text"])
+            self.assertNotIn("老師說的是 ResNet", final["text"].split(app.USER_NOTES_HEADING)[1])
+
+            files = {name: client.get(url) for name, url in saved["files"].items()}
+            live_notes = files["live_notes"].text
+            self.assertIn("✍️ [00:00:00] 這頁會考", live_notes)
+            self.assertIn("⟲ 更正 [00:00:00] 老師說的是 ResNet", live_notes)
+            self.assertIn(app.USER_NOTES_HEADING, files["final_notes"].text)
+            self.assertIn("<h1>機器學習</h1>", files["final_html"].text)
+
+            metadata = files["metadata"].json()
+            self.assertEqual(metadata["user_note_count"], 1)
+            self.assertEqual(metadata["correction_count"], 1)
+            date, clock = metadata["session_id"].split("_")
+            material = json.loads(
+                (Path(output) / date / clock / "finalize_input.json").read_text("utf-8"))
+            self.assertEqual(material["user_notes"], ["[00:00:00] 這頁會考"])
+            self.assertEqual(material["corrections"], ["[00:00:00] 老師說的是 ResNet"])
+
+    def test_empty_and_oversized_user_input_is_handled_without_polluting_the_notes(self):
+        with tempfile.TemporaryDirectory() as output, fake_services(output), \
+                TestClient(app.app) as client:
+            messages = []
+            with client.websocket_connect("/ws") as ws:
+                ws.send_json({"type": "meta", "course_title": "机器学习"})
+                receive_until(ws, "ready", messages)
+                ws.send_json({"type": "user_note", "text": "   "})
+                ws.send_json({"type": "user_note", "text": "字" * (app.USER_NOTE_MAX_CHARS + 50)})
+                note = receive_until(ws, "user_note", messages)
+                ws.send_json({"type": "stop"})
+                saved = receive_until(ws, "saved", messages)
+
+            # The blank one is dropped outright; the long one is cut, not rejected.
+            self.assertEqual(note["text"].count("字"), app.USER_NOTE_MAX_CHARS)
+            metadata = client.get(saved["files"]["metadata"]).json()
+            self.assertEqual(metadata["user_note_count"], 1)
+
+    def test_bundle_download_is_offered_once_the_lecture_is_saved(self):
+        with tempfile.TemporaryDirectory() as output, fake_services(output), \
+                TestClient(app.app) as client:
+            messages = []
+            with client.websocket_connect("/ws") as ws:
+                ws.send_json({"type": "meta", "course_title": "机器学习"})
+                receive_until(ws, "ready", messages)
+                ws.send_bytes(b"\x00\x00" * 1600)
+                receive_until(ws, "transcript", messages)
+                ws.send_json({"type": "stop"})
+                saved = receive_until(ws, "saved", messages)
+
+            response = client.get(saved["files"]["bundle"])
+            self.assertEqual(response.status_code, 200)
+            with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
+                self.assertEqual(sorted(bundle.namelist()), sorted(app.BUNDLE_FILES))
+                self.assertIn("機器學習", bundle.read("final_notes.html").decode("utf-8"))
 
     def test_persistent_503_preserves_traditional_transcript_and_final_fallback(self):
         with tempfile.TemporaryDirectory() as output, fake_services(output, failures=100) as requests, \

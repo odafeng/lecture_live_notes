@@ -24,6 +24,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></symbol>
     <symbol id="i-sound" viewBox="0 0 24 24"><path d="M3 10v4M7.5 6v12M12 3v18M16.5 7v10M21 10v4"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16zM14 6l4 4"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-.6 4M20 5v6h-6"/></symbol>
   </svg>
 
@@ -115,6 +116,19 @@
               </div>
               <div id="notes"></div>
             </div>
+            <form id="noteComposer" class="note-composer">
+              <div class="composer-switch" role="group" aria-label="輸入類型">
+                <button type="button" id="noteKindNote" aria-pressed="true">✍️ 筆記</button>
+                <button type="button" id="noteKindCorrection" aria-pressed="false">⟲ 更正</button>
+              </div>
+              <label class="visually-hidden" for="noteInput">課堂輸入</label>
+              <input id="noteInput" maxlength="2000" autocomplete="off" disabled
+                     placeholder="寫下你的想法，按 Enter 送出" aria-describedby="composerHelp" />
+              <button type="submit" id="noteSendBtn" class="button button-quiet" disabled>
+                <svg class="icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="visually-hidden">送出</span>
+              </button>
+              <p id="composerHelp" class="composer-help">會寫進這堂課的筆記，也會進最終的完整筆記。</p>
+            </form>
             <footer class="panel-footer"><svg class="icon" aria-hidden="true"><use href="#i-lines"/></svg><span>分段整理 · 繁體中文輸出</span></footer>
           </section>
         </div>
@@ -123,7 +137,7 @@
 
       <section id="finalPanel" class="final-panel" aria-labelledby="finalHeading" hidden>
         <header class="final-header"><div><span class="eyebrow">READY TO REVISIT</span><h2 id="finalHeading">把這堂課，好好收起來。</h2><p>重讀重點，也保留每一份課堂記錄。</p></div><div class="final-actions"><button id="remergeBtn" class="button button-quiet" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span id="remergeLabel">重新整併</span></button><span id="savedBadge" class="saved-badge" hidden><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>已儲存</span></div></header>
-        <div class="final-layout"><article class="final-document"><div class="document-kicker">CLASS NOTES <span>課堂完整筆記</span></div><div id="final" class="markdown"></div></article><aside class="downloads-panel" aria-labelledby="downloadHeading"><svg class="icon download-heading-icon"><use href="#i-download"/></svg><h3 id="downloadHeading">帶走這堂課</h3><p>下載檔案，隨時回來複習。</p><div id="downloads"></div><small>筆記以 Markdown 格式儲存。</small></aside></div>
+        <div class="final-layout"><article class="final-document"><div class="document-kicker">CLASS NOTES <span>課堂完整筆記</span></div><div id="final" class="markdown"></div></article><aside class="downloads-panel" aria-labelledby="downloadHeading"><svg class="icon download-heading-icon"><use href="#i-download"/></svg><h3 id="downloadHeading">帶走這堂課</h3><p>下載檔案，隨時回來複習。</p><div id="downloads"></div><small>Markdown 方便再加工，HTML 可直接讀與列印。</small></aside></div>
       </section>
     </main>
   </div>
