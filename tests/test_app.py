@@ -706,7 +706,7 @@ class SmokeTests(unittest.TestCase):
 
 
 class Translations(unittest.TestCase):
-    """The finished notes get Polish and German copies, for groupmates who read neither Chinese."""
+    """The finished notes get a copy per language, for groupmates who read no Chinese."""
 
     NOTES = "# 機器學習\n\n- 類別變項 categorical variables\n- 待確認：老師說的那個年份"
 
@@ -714,10 +714,12 @@ class Translations(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
-        self.paths = app.session_paths("20260922_101500")
-        patcher = patch.object(app, "OUTPUT_DIR", self.dir)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        # The key is patched like everywhere else: without it call_anthropic_text refuses
+        # before reaching the mock transport, which passes only on a machine with a real .env.
+        for target, value in (("OUTPUT_DIR", self.dir), ("ANTHROPIC_API_KEY", "test-key")):
+            patcher = patch.object(app, target, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.paths = app.session_paths("20260922_101500")
         self.paths["dir"].mkdir(parents=True, exist_ok=True)
 
