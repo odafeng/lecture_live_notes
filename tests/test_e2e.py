@@ -102,7 +102,11 @@ class BrowserTests(unittest.TestCase):
                     expect(page.locator("#final h1")).to_have_text("機器學習")
                     expect(page.locator("#final strong")).to_have_text("重點")
                     expect(page.locator("#final table")).to_have_count(1)
-                    expect(page.locator("#downloads a")).to_have_count(7)
+                    # 7 originals, plus a Markdown and an HTML copy per translated language.
+                    expect(page.locator("#downloads a")).to_have_count(15)
+                    for name in ("English", "Deutsch", "Polski", "Español"):
+                        expect(page.get_by_role("link", name=f"完整筆記 {name}",
+                                                exact=True)).to_be_visible()
                     expect(page.locator("#final img, #final script, #final a[href^='javascript:']")).to_have_count(0)
                     self.assertIsNone(page.evaluate("window.injected"))
                     self.assertTrue(page.evaluate("window.testInputStream.getTracks().every(t => t.readyState === 'ended')"))

@@ -17,6 +17,13 @@ import app
 from tests.fakes import sse, stream_response
 
 
+def translation_target(prompt):
+    """Read the language off the instruction line: the notes themselves may quote one."""
+    first = prompt.splitlines()[0]
+    return next(l for l in app.TRANSLATION_LANGUAGES.values()
+                if first == f"Translate the lecture notes below into {l}.")
+
+
 def text_response(text="### 课堂笔记\n- **重点**：machine learning 的类别变项。"):
     return stream_response([text])
 
@@ -298,7 +305,11 @@ class FinalizeTests(unittest.TestCase):
         real_client = httpx.AsyncClient
 
         def respond(request):
-            prompts.append(json.loads(request.content)["messages"][0]["content"])
+            prompt = json.loads(request.content)["messages"][0]["content"]
+            prompts.append(prompt)
+            if prompt.startswith("Translate the lecture notes"):
+                language = translation_target(prompt)
+                return stream_response([f"# Notes in {language}"])
             outcome = next(outcomes)
             if isinstance(outcome, Exception):
                 raise outcome
@@ -376,6 +387,148 @@ class FinalizeTests(unittest.TestCase):
         self.assertNotIn("舊的", document)
         self.assertIn("<h1>機器學習</h1>", document)
 
+    def test_rerun_refreshes_the_translated_copies(self):
+        """A re-merge replaces the notes, so translations of the old text must not survive."""
+        self.write_session()
+        (self.session_dir / "final_notes.pl.md").write_text(
+            "# Stare notatki\n", encoding="utf-8")
+
+        with self.anthropic(stream_response(["# 机器学习\n\n- 类别变项"])), \
+                TestClient(app.app) as client:
+            self.assertEqual(client.post(f"/finalize/{self.SESSION}").status_code, 200)
+
+        polish = (self.session_dir / "final_notes.pl.md").read_text(encoding="utf-8")
+        self.assertNotIn("Stare notatki", polish)
+        self.assertIn("Polish", polish)
+        self.assertTrue((self.session_dir / "final_notes.de.md").exists())
+
+    def test_rerun_hands_back_the_links_including_the_new_translations(self):
+        """The panel is rebuilt from this response; without it the copies stay invisible."""
+        self.write_session()
+        with self.anthropic(stream_response(["# 机器学习\n\n- 类别变项"])), \
+                TestClient(app.app) as client:
+            body = client.post(f"/finalize/{self.SESSION}").json()
+
+        self.assertIn("final_pl", body["files"])
+        self.assertIn("final_de_html", body["files"])
+        self.assertEqual(body["files"]["final_notes"],
+                         f"/download/{self.SESSION}/final_notes.md")
+        self.assertEqual(client.get(body["files"]["final_pl"]).status_code, 200)
+
+    def test_background_retry_leaves_an_already_merged_session_alone(self):
+        """A manual re-run may have succeeded while the retry was still sleeping."""
+        self.write_session(status=app.FINAL_STATUS_OK)
+        merges = []
+
+        async def record(session_id):
+            merges.append(session_id)
+            return ""
+
+        # Patched below finalize_session, so the real skip guard still runs. Patching
+        # finalize_session itself hid a TypeError and passed for the wrong reason.
+        with patch.object(app, "BACKGROUND_RETRY_DELAYS", (0,)), \
+                patch.object(app, "_finalize_session", record):
+            asyncio.run(app.retry_finalize_in_background(self.SESSION))
+
+        self.assertEqual(merges, [])
+
+    def test_two_merges_of_one_session_do_not_overlap(self):
+        """Interleaved runs left the notes on one version and the translations on another."""
+        depth = 0
+        peak = 0
+        real_client = httpx.AsyncClient
+
+        async def respond(request):
+            nonlocal depth, peak
+            depth += 1
+            peak = max(peak, depth)
+            try:
+                await asyncio.sleep(0)
+                return stream_response(["# 机器学习"])
+            finally:
+                depth -= 1
+
+        async def both():
+            with patch.object(app.httpx, "AsyncClient", side_effect=lambda **kw: real_client(
+                    transport=httpx.MockTransport(respond), **kw)):
+                await asyncio.gather(app.finalize_session(self.SESSION),
+                                     app.finalize_session(self.SESSION))
+
+        self.write_session()
+        asyncio.run(both())
+        self.assertEqual(peak, 1)
+
+    def test_background_retry_rechecks_after_it_gets_the_lock(self):
+        """It may have waited behind a manual re-run that already succeeded."""
+        self.write_session()
+        merges = []
+
+        async def manual():
+            await app.finalize_session(self.SESSION)
+
+        async def both():
+            real_client = httpx.AsyncClient
+
+            async def respond(request):
+                merges.append(json.loads(request.content)["messages"][0]["content"])
+                await asyncio.sleep(0)
+                return stream_response(["# 机器学习"])
+
+            with patch.object(app.httpx, "AsyncClient", side_effect=lambda **kw: real_client(
+                    transport=httpx.MockTransport(respond), **kw)), \
+                    patch.object(app, "BACKGROUND_RETRY_DELAYS", (0,)):
+                await asyncio.gather(manual(), app.retry_finalize_in_background(self.SESSION))
+
+        asyncio.run(both())
+        self.assertEqual(sum("完整上課筆記" in m for m in merges), 1)
+
+    def test_locks_do_not_pile_up_one_per_lecture(self):
+        """A local server runs for weeks; a dict keyed by session must not grow forever."""
+        self.write_session()
+        with self.anthropic(stream_response(["# 机器学习"])), TestClient(app.app) as client:
+            client.post(f"/finalize/{self.SESSION}")
+        self.assertNotIn(self.SESSION, app._session_locks)
+
+    def test_a_late_failure_does_not_bury_notes_that_already_merged(self):
+        """The first wrap-up can finish after a re-merge succeeded; its stub must not win."""
+        self.write_session(status=app.FINAL_STATUS_OK)
+        paths = app.session_paths(self.SESSION)
+        paths["final"].write_text("# 機器學習\n\n- 真正的筆記\n", encoding="utf-8")
+        stub = "# 機器學習\n\n最終整併失敗：RuntimeError: boom\n"
+
+        notes, status = asyncio.run(app.publish_final_notes(
+            self.SESSION, paths, "機器學習", stub, app.FINAL_STATUS_FAILED))
+
+        self.assertEqual(status, app.FINAL_STATUS_OK)
+        self.assertIn("真正的筆記", notes)
+        self.assertIn("真正的筆記", paths["final"].read_text(encoding="utf-8"))
+
+    def test_a_translation_older_than_the_notes_is_not_offered(self):
+        """A copy that outlived the notes it translated must not be handed out as current."""
+        self.write_session(status=app.FINAL_STATUS_OK)
+        session_dir = self.session_dir
+        for name in ("final_notes.pl.md", "final_notes.pl.html",
+                     "final_notes.de.md", "final_notes.de.html"):
+            (session_dir / name).write_text("stale", encoding="utf-8")
+        merged_at = (session_dir / "final_notes.md").stat().st_mtime
+        for name in ("final_notes.pl.md", "final_notes.pl.html"):
+            os.utime(session_dir / name, (merged_at - 60, merged_at - 60))
+
+        links = app.download_links(self.SESSION)
+        self.assertNotIn("final_pl", links)
+        self.assertNotIn("final_pl_html", links)
+        self.assertIn("final_de", links)
+
+        with TestClient(app.app) as client:
+            with zipfile.ZipFile(io.BytesIO(client.get(f"/bundle/{self.SESSION}").content)) as z:
+                self.assertNotIn("final_notes.pl.md", z.namelist())
+                self.assertIn("final_notes.de.md", z.namelist())
+            # A link kept from before the re-merge must not reach the stale copy either.
+            self.assertEqual(
+                client.get(f"/download/{self.SESSION}/final_notes.pl.md").status_code, 404)
+            self.assertEqual(
+                client.get(f"/download/{self.SESSION}/final_notes.de.md").status_code, 200)
+
     def test_html_output_can_be_downloaded(self):
         self.write_session()
         (self.session_dir / "final_notes.html").write_text("<h1>機器學習</h1>", encoding="utf-8")
@@ -386,7 +539,11 @@ class FinalizeTests(unittest.TestCase):
 
     def test_bundle_zips_every_file_the_lecture_produced(self):
         self.write_session()
-        for name in ("lecture.wav", "transcript.txt", "live_notes.md", "final_notes.html"):
+        for name in ("lecture.wav", "transcript.txt", "live_notes.md", "final_notes.html",
+                     "final_notes.en.md", "final_notes.en.html",
+                     "final_notes.de.md", "final_notes.de.html",
+                     "final_notes.pl.md", "final_notes.pl.html",
+                     "final_notes.es.md", "final_notes.es.html"):
             (self.session_dir / name).write_text(f"內容 {name}", encoding="utf-8")
         with TestClient(app.app) as client:
             response = client.get(f"/bundle/{self.SESSION}")
@@ -394,7 +551,15 @@ class FinalizeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "application/zip")
         with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
-            self.assertEqual(sorted(bundle.namelist()), sorted(app.BUNDLE_FILES))
+            # Spelled out rather than compared against BUNDLE_FILES: the constant defines the
+            # zip, so checking one against the other passes even when a file goes missing.
+            self.assertEqual(sorted(bundle.namelist()), sorted([
+                "lecture.wav", "transcript.txt", "live_notes.md", "session.json",
+                "final_notes.md", "final_notes.html",
+                "final_notes.en.md", "final_notes.en.html",
+                "final_notes.de.md", "final_notes.de.html",
+                "final_notes.pl.md", "final_notes.pl.html",
+                "final_notes.es.md", "final_notes.es.html"]))
             self.assertEqual(bundle.read("transcript.txt").decode("utf-8"), "內容 transcript.txt")
         # The download is named after the lecture, not the opaque session id.
         self.assertIn("20260908", response.headers["content-disposition"])
@@ -538,6 +703,136 @@ class SmokeTests(unittest.TestCase):
                 error = ws.receive_json()
                 self.assertEqual(error["type"], "error")
                 self.assertIn("ANTHROPIC_API_KEY", error["text"])
+
+
+class Translations(unittest.TestCase):
+    """The finished notes get Polish and German copies, for groupmates who read neither Chinese."""
+
+    NOTES = "# 機器學習\n\n- 類別變項 categorical variables\n- 待確認：老師說的那個年份"
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        self.paths = app.session_paths("20260922_101500")
+        patcher = patch.object(app, "OUTPUT_DIR", self.dir)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.paths = app.session_paths("20260922_101500")
+        self.paths["dir"].mkdir(parents=True, exist_ok=True)
+
+    @contextmanager
+    def anthropic(self, by_language):
+        """Answer each translation request with the text this test wants for that language."""
+        prompts = []
+        real_client = httpx.AsyncClient
+
+        def respond(request):
+            prompt = json.loads(request.content)["messages"][0]["content"]
+            prompts.append(prompt)
+            lang = next(k for k, name in app.TRANSLATION_LANGUAGES.items()
+                        if name == translation_target(prompt))
+            # Languages the test says nothing about still answer, so each test only has to
+            # describe the behaviour it is actually about.
+            outcome = by_language.get(lang, f"# Notes in {lang}")
+            if isinstance(outcome, Exception):
+                raise outcome
+            return stream_response([outcome])
+
+        with patch.object(app.httpx, "AsyncClient", side_effect=lambda **kw: real_client(
+                transport=httpx.MockTransport(respond), **kw)), \
+                patch.object(app, "LIVE_RETRY_DELAYS", (0, 0, 0)):
+            yield prompts
+
+    def test_every_language_the_group_reads_is_produced(self):
+        self.assertEqual(list(app.TRANSLATION_LANGUAGES), ["en", "de", "pl", "es"])
+        self.assertEqual(app.TRANSLATION_LANGUAGES["es"], "Latin American Spanish")
+        # The file suffix stays short; the document still declares the real BCP-47 tag.
+        with self.anthropic({lang: f"# Notes {lang}" for lang in app.TRANSLATION_LANGUAGES}):
+            written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
+
+        self.assertEqual(written, ["en", "de", "pl", "es"])
+        self.assertIn('lang="es-419"',
+                      (self.paths["dir"] / "final_notes.es.html").read_text(encoding="utf-8"))
+        self.assertIn('lang="pl"',
+                      (self.paths["dir"] / "final_notes.pl.html").read_text(encoding="utf-8"))
+
+    def test_finished_notes_get_one_copy_per_language(self):
+        with self.anthropic({"pl": "# Uczenie maszynowe\n\n- zmienne kategorialne",
+                             "de": "# Maschinelles Lernen\n\n- kategoriale Variablen"}):
+            written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
+
+        self.assertEqual(written, list(app.TRANSLATION_LANGUAGES))
+        polish = (self.paths["dir"] / "final_notes.pl.md").read_text(encoding="utf-8")
+        german = (self.paths["dir"] / "final_notes.de.md").read_text(encoding="utf-8")
+        self.assertIn("Uczenie maszynowe", polish)
+        self.assertIn("Maschinelles Lernen", german)
+        self.assertIn("<h1>Uczenie maszynowe</h1>",
+                      (self.paths["dir"] / "final_notes.pl.html").read_text(encoding="utf-8"))
+        self.assertIn('lang="de"',
+                      (self.paths["dir"] / "final_notes.de.html").read_text(encoding="utf-8"))
+
+    def test_a_translation_that_cannot_be_written_does_not_sink_the_session(self):
+        """Disk trouble on one copy must not cost the other language, or the whole wrap-up."""
+        real_write = Path.write_text
+
+        def refuse_polish(self, *a, **kw):
+            if self.name.startswith("final_notes.pl"):
+                raise OSError("disk full")
+            return real_write(self, *a, **kw)
+
+        with self.anthropic({"pl": "# Uczenie maszynowe", "de": "# Maschinelles Lernen"}), \
+                patch.object(Path, "write_text", refuse_polish):
+            written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
+
+        self.assertEqual(written, [l for l in app.TRANSLATION_LANGUAGES if l != "pl"])
+        self.assertIn("Maschinelles Lernen",
+                      (self.paths["dir"] / "final_notes.de.md").read_text(encoding="utf-8"))
+
+    def test_a_failed_translation_removes_the_copy_it_could_not_refresh(self):
+        """A stale translation of notes that no longer exist is worse than no translation."""
+        (self.paths["dir"] / "final_notes.pl.md").write_text("# Stare\n", encoding="utf-8")
+        (self.paths["dir"] / "final_notes.pl.html").write_text("<p>Stare</p>", encoding="utf-8")
+
+        with self.anthropic({"pl": httpx.ConnectError("no route"), "de": "# Maschinelles Lernen"}):
+            asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
+
+        self.assertFalse((self.paths["dir"] / "final_notes.pl.md").exists())
+        self.assertFalse((self.paths["dir"] / "final_notes.pl.html").exists())
+
+    def test_a_copy_that_cannot_be_deleted_does_not_sink_the_session(self):
+        """unlink raises more than FileNotFoundError; the cleanup needs isolating too."""
+        (self.paths["dir"] / "final_notes.pl.md").write_text("# Stare\n", encoding="utf-8")
+        real_unlink = Path.unlink
+
+        def refuse(self, **kw):
+            if self.name.startswith("final_notes.pl"):
+                raise PermissionError("read-only")
+            return real_unlink(self, **kw)
+
+        with self.anthropic({"pl": httpx.ConnectError("no route"), "de": "# Maschinelles"}), \
+                patch.object(Path, "unlink", refuse):
+            written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
+
+        self.assertEqual(written, [l for l in app.TRANSLATION_LANGUAGES if l != "pl"])
+
+    def test_the_model_is_asked_to_translate_the_whole_notes(self):
+        """Without this, dropping {notes} from the prompt leaves every test green."""
+        with self.anthropic({"pl": "# Uczenie", "de": "# Maschinelles"}) as prompts:
+            asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
+
+        self.assertEqual(len(prompts), len(app.TRANSLATION_LANGUAGES))
+        for prompt in prompts:
+            self.assertIn(self.NOTES, prompt)
+
+    def test_a_failed_translation_does_not_cost_the_other_language(self):
+        with self.anthropic({"pl": httpx.ConnectError("no route"),
+                             "de": "# Maschinelles Lernen"}):
+            written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
+
+        self.assertEqual(written, [l for l in app.TRANSLATION_LANGUAGES if l != "pl"])
+        self.assertTrue((self.paths["dir"] / "final_notes.de.md").exists())
+        self.assertFalse((self.paths["dir"] / "final_notes.pl.md").exists())
 
 
 if __name__ == "__main__":

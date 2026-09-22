@@ -22,6 +22,11 @@ def receive_until(ws, kind, messages):
     raise AssertionError(f"Did not receive {kind}")
 
 
+def merge_prompt(requests):
+    """The final merge, named rather than indexed: translation calls follow it."""
+    return next(p for p in reversed(requests) if "完整上課筆記" in p)
+
+
 class WorkflowTests(unittest.TestCase):
     def test_transcription_retry_notes_chapter_stop_and_downloads(self):
         with tempfile.TemporaryDirectory() as output, fake_services(output, failures=1) as requests, \
@@ -54,9 +59,10 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn(TRADITIONAL_TRANSCRIPT, transcript["line"])
             self.assertIn("<h1>機器學習</h1>", final["html"])
             self.assertNotIn("<img", final["html"])
-            self.assertEqual(len(requests), 4)
+            # 1 note + 1 chapter + 1 merge (after 1 retry), then one call per language.
+            self.assertEqual(len(requests), 4 + len(app.TRANSLATION_LANGUAGES))
             self.assertIn(TRADITIONAL_TRANSCRIPT, requests[0])
-            self.assertIn("章節摘要", requests[-1])
+            self.assertIn("章節摘要", merge_prompt(requests))
 
             files = {name: client.get(url) for name, url in saved["files"].items()}
             self.assertTrue(all(response.status_code == 200 for response in files.values()))
@@ -94,7 +100,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(note["kind"], "note")
             self.assertIn("這頁會考", note["text"])
 
-            note_prompt, final_prompt = requests[0], requests[-1]
+            note_prompt, final_prompt = requests[0], merge_prompt(requests)
             self.assertIn("老師說的是 ResNet", note_prompt)
             self.assertIn("使用者更正", note_prompt)
             self.assertIn("這頁會考", final_prompt)
@@ -139,6 +145,43 @@ class WorkflowTests(unittest.TestCase):
             metadata = client.get(saved["files"]["metadata"]).json()
             self.assertEqual(metadata["user_note_count"], 1)
 
+    def test_groupmates_get_the_notes_in_every_language_the_group_reads(self):
+        with tempfile.TemporaryDirectory() as output, fake_services(output), \
+                TestClient(app.app) as client:
+            messages = []
+            with client.websocket_connect("/ws") as ws:
+                ws.send_json({"type": "meta", "course_title": "机器学习"})
+                receive_until(ws, "ready", messages)
+                ws.send_bytes(b"\x00\x00" * 1600)
+                receive_until(ws, "transcript", messages)
+                ws.send_json({"type": "stop"})
+                saved = receive_until(ws, "saved", messages)
+
+            for key, language in (("final_en", "English"), ("final_de", "German"),
+                                  ("final_pl", "Polish"), ("final_es", "Latin American Spanish")):
+                copy = client.get(saved["files"][key])
+                self.assertEqual(copy.status_code, 200)
+                self.assertIn(f"Notatki ({language})", copy.text)
+            # The Chinese original is untouched by the translation step.
+            self.assertIn("機器學習", client.get(saved["files"]["final_notes"]).text)
+
+    def test_a_failed_merge_is_not_translated(self):
+        """Translating the fallback stub costs money and gives groupmates nothing to read."""
+        with tempfile.TemporaryDirectory() as output, fake_services(output) as requests, \
+                TestClient(app.app) as client:
+            requests.always_fail = True
+            messages = []
+            with client.websocket_connect("/ws") as ws:
+                ws.send_json({"type": "meta", "course_title": "机器学习"})
+                receive_until(ws, "ready", messages)
+                ws.send_bytes(b"\x00\x00" * 1600)
+                receive_until(ws, "transcript", messages)
+                ws.send_json({"type": "stop"})
+                saved = receive_until(ws, "saved", messages)
+
+            self.assertNotIn("final_pl", saved["files"])
+            self.assertFalse(any(p.startswith("Translate the lecture notes") for p in requests))
+
     def test_bundle_download_is_offered_once_the_lecture_is_saved(self):
         with tempfile.TemporaryDirectory() as output, fake_services(output), \
                 TestClient(app.app) as client:
@@ -156,6 +199,17 @@ class WorkflowTests(unittest.TestCase):
             with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
                 self.assertEqual(sorted(bundle.namelist()), sorted(app.BUNDLE_FILES))
                 self.assertIn("機器學習", bundle.read("final_notes.html").decode("utf-8"))
+                # Groupmates get one file, not a folder of links to chase. Each translated file
+                # is named here, so dropping one from BUNDLE_FILES cannot go unnoticed.
+                for suffix, language in (("en", "English"), ("de", "German"),
+                                         ("pl", "Polish"), ("es", "Latin American Spanish")):
+                    self.assertIn(f"Notatki ({language})",
+                                  bundle.read(f"final_notes.{suffix}.md").decode("utf-8"))
+                self.assertIn('lang="pl"',
+                              bundle.read("final_notes.pl.html").decode("utf-8"))
+                # Latin American Spanish files stay short; the document carries the full tag.
+                self.assertIn('lang="es-419"',
+                              bundle.read("final_notes.es.html").decode("utf-8"))
 
     def test_persistent_503_preserves_traditional_transcript_and_final_fallback(self):
         with tempfile.TemporaryDirectory() as output, fake_services(output, failures=100) as requests, \

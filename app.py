@@ -9,6 +9,7 @@ import tempfile
 import time
 import wave
 import zipfile
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -45,8 +46,15 @@ DEFAULT_CUSTOM_VOCABULARY = [
 USER_NOTE_MAX_CHARS = 2000
 USER_NOTES_HEADING = "## 我的課堂筆記（原文）"
 USER_NOTE_MARKERS = {"note": "✍️", "correction": "⟲ 更正"}
-BUNDLE_FILES = ("final_notes.md", "final_notes.html", "live_notes.md",
-                "transcript.txt", "lecture.wav", "session.json")
+TRANSLATION_LANGUAGES = {"en": "English", "de": "German", "pl": "Polish",
+                         "es": "Latin American Spanish"}
+# The key is the file suffix, which stays short. Where the document's real BCP-47 tag differs,
+# it is spelled out here so screen readers and spellcheckers get the right variant.
+HTML_LANG = {"es": "es-419"}
+BUNDLE_FILES = ("final_notes.md", "final_notes.html",
+                *(f"final_notes.{lang}.{ext}"
+                  for lang in TRANSLATION_LANGUAGES for ext in ("md", "html")),
+                "live_notes.md", "transcript.txt", "lecture.wav", "session.json")
 
 NOTE_WINDOW_SECONDS = int(os.getenv("NOTE_WINDOW_SECONDS", "60"))
 ROLLUP_EVERY_BLOCKS = int(os.getenv("ROLLUP_EVERY_BLOCKS", "10"))
@@ -245,12 +253,12 @@ hr { border: 0; border-top: 1px solid #dce0d4; margin: 2.5rem 0; }
 """
 
 
-def render_notes_document(course_title: str, notes: str) -> str:
+def render_notes_document(course_title: str, notes: str, lang: str = "zh-Hant") -> str:
     """A standalone page: no network, no sibling files, so it survives being emailed or printed."""
     title = html.escape(course_title.strip() or "課堂筆記")
     return (
         "<!doctype html>\n"
-        '<html lang="zh-Hant">\n<head>\n<meta charset="utf-8" />\n'
+        f'<html lang="{html.escape(lang)}">\n<head>\n<meta charset="utf-8" />\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1" />\n'
         f"<title>{title}</title>\n<style>{NOTES_DOCUMENT_CSS}</style>\n</head>\n"
         f"<body>\n<main>\n{MARKDOWN.render(notes)}</main>\n</body>\n</html>\n"
@@ -382,6 +390,63 @@ def write_final_outputs(paths: dict[str, Path], course_title: str, notes: str) -
     paths["final_html"].write_text(render_notes_document(course_title, notes), encoding="utf-8")
 
 
+def translation_prompt(notes: str, language: str) -> str:
+    return f"""
+Translate the lecture notes below into {language}.
+
+Rules:
+- Translate only. Do not add, remove, explain or summarise anything.
+- Keep the Markdown structure exactly: the same headings, lists, tables and emphasis.
+- Leave English technical terms in English. They are what the reader will look up.
+- Keep every unresolved marker. 「待確認」 becomes the {language} equivalent, but the item stays.
+- Output the translated notes only, with no preamble.
+
+Notes:
+{notes}
+""".strip()
+
+
+async def write_translations(paths: dict[str, Path], course_title: str,
+                             notes: str) -> list[str]:
+    """Translated copies for groupmates who do not read Chinese."""
+    written = []
+    for lang, language in TRANSLATION_LANGUAGES.items():
+        markdown = paths["dir"] / f"final_notes.{lang}.md"
+        document = paths["dir"] / f"final_notes.{lang}.html"
+        # The whole per-language job is isolated, writes included: the Chinese notes are already
+        # on disk, so nothing here is worth losing the other language or failing the session.
+        try:
+            text = await call_anthropic_text(translation_prompt(notes, language),
+                                             retry_delays=LIVE_RETRY_DELAYS)
+            markdown.write_text(text + "\n", encoding="utf-8")
+            document.write_text(
+                render_notes_document(course_title, text, lang=HTML_LANG.get(lang, lang)),
+                encoding="utf-8")
+        except Exception as e:
+            logger.warning("%s translation failed: %s: %s", lang, type(e).__name__, e)
+            # Whatever is on disk translates notes this run has already replaced. Handing that
+            # to a groupmate as the current version is worse than handing them nothing.
+            for stale in (markdown, document):
+                try:
+                    stale.unlink(missing_ok=True)
+                except OSError as cleanup_failure:
+                    # Losing the wrap-up over a file that will not delete is the worse
+                    # trade. It is withheld by its timestamp instead; see translations_on_disk.
+                    logger.error("stale copy %s could not be removed (%s)",
+                                 stale, cleanup_failure)
+            continue
+        written.append(lang)
+    return written
+
+
+def final_status_of(session_id: str) -> str | None:
+    try:
+        meta = json.loads(session_paths(session_id)["meta"].read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return meta.get("final_notes_status")
+
+
 def set_final_status(session_id: str, status: str) -> None:
     """Record whether final_notes.md holds a real merge or the raw fallback."""
     meta_path = session_paths(session_id)["meta"]
@@ -393,8 +458,53 @@ def set_final_status(session_id: str, status: str) -> None:
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-async def finalize_session(session_id: str) -> str:
+# Both write paths take this: the websocket wrap-up and the re-merge can otherwise interleave,
+# leaving one run's notes on disk beside the other run's translations.
+_session_locks: dict[str, tuple[asyncio.Lock, int]] = {}
+
+
+@asynccontextmanager
+async def session_lock(session_id: str):
+    lock, waiting = _session_locks.get(session_id, (asyncio.Lock(), 0))
+    _session_locks[session_id] = (lock, waiting + 1)
+    try:
+        async with lock:
+            yield
+    finally:
+        # Counted rather than popped on release: a waiter is holding this same object.
+        held, waiting = _session_locks[session_id]
+        if waiting <= 1:
+            del _session_locks[session_id]
+        else:
+            _session_locks[session_id] = (held, waiting - 1)
+
+
+async def publish_final_notes(session_id: str, paths: dict[str, Path], course_title: str,
+                              notes: str, status: str) -> tuple[str, str]:
+    """Write the notes and their translations, unless a better merge landed while we waited."""
+    if status == FINAL_STATUS_FAILED and final_status_of(session_id) == FINAL_STATUS_OK:
+        # Something merged this session meanwhile. Its notes are real; ours are a stub.
+        return paths["final"].read_text(encoding="utf-8"), FINAL_STATUS_OK
+    write_final_outputs(paths, course_title, notes)
+    # A failed merge leaves a stub, not notes. Translating it would bill for text nobody can
+    # revise from; the re-merge translates once it has something real.
+    if status != FINAL_STATUS_FAILED:
+        await write_translations(paths, course_title, notes)
+    return notes, status
+
+
+async def finalize_session(session_id: str, *, skip_if_merged: bool = False) -> str | None:
     """Re-run the final merge from saved material and overwrite final_notes.md."""
+    async with session_lock(session_id):
+        # Checked here rather than before the wait: a manual re-run may have succeeded while
+        # the background retry was queued behind it.
+        if skip_if_merged and final_status_of(session_id) == FINAL_STATUS_OK:
+            logger.info("Background finalize skipped for %s: already merged", session_id)
+            return None
+        return await _finalize_session(session_id)
+
+
+async def _finalize_session(session_id: str) -> str:
     paths = session_paths(session_id)
     material = json.loads(paths["finalize_input"].read_text(encoding="utf-8"))
     course_title = material.get("course_title", "")
@@ -405,9 +515,52 @@ async def finalize_session(session_id: str) -> str:
         retry_delays=FINAL_RETRY_DELAYS,
     )
     notes = append_user_notes_section(notes, user_notes)
-    write_final_outputs(paths, course_title, notes)
+    # The copies on disk translate the notes this run just replaced, so they are refreshed too.
+    notes, _ = await publish_final_notes(session_id, paths, course_title, notes,
+                                         FINAL_STATUS_OK)
     set_final_status(session_id, FINAL_STATUS_OK)
     return notes
+
+
+DOWNLOAD_LINK_KEYS = {
+    "lecture.wav": "audio", "transcript.txt": "transcript", "live_notes.md": "live_notes",
+    "final_notes.md": "final_notes", "final_notes.html": "final_html",
+    "session.json": "metadata",
+    **{f"final_notes.{lang}.md": f"final_{lang}" for lang in TRANSLATION_LANGUAGES},
+    **{f"final_notes.{lang}.html": f"final_{lang}_html" for lang in TRANSLATION_LANGUAGES},
+}
+
+
+TRANSLATION_FILES = frozenset(f"final_notes.{lang}.{ext}"
+                              for lang in TRANSLATION_LANGUAGES for ext in ("md", "html"))
+
+
+def is_current(session_dir: Path, name: str) -> bool:
+    """A translation older than final_notes.md describes notes that have been replaced.
+
+    Deleting a superseded copy can fail (a read-only file, a locked one), so the timestamp
+    decides what may be handed out rather than trusting that cleanup succeeded.
+    """
+    if name not in TRANSLATION_FILES:
+        return True
+    try:
+        return (session_dir / name).stat().st_mtime >= (session_dir / "final_notes.md").stat().st_mtime
+    except OSError:
+        return False
+
+
+def session_files(session_id: str, names) -> list[str]:
+    session_dir = session_dir_for(session_id)
+    return [name for name in names
+            if (session_dir / name).exists() and is_current(session_dir, name)]
+
+
+def download_links(session_id: str) -> dict[str, str]:
+    """Built from the files on disk, so a copy written by a later re-run still shows up."""
+    links = {DOWNLOAD_LINK_KEYS[name]: f"/download/{session_id}/{name}"
+             for name in session_files(session_id, DOWNLOAD_LINK_KEYS)}
+    links["bundle"] = f"/bundle/{session_id}"
+    return links
 
 
 async def retry_finalize_in_background(session_id: str) -> None:
@@ -415,7 +568,7 @@ async def retry_finalize_in_background(session_id: str) -> None:
     for delay in BACKGROUND_RETRY_DELAYS:
         await asyncio.sleep(delay)
         try:
-            await finalize_session(session_id)
+            await finalize_session(session_id, skip_if_merged=True)
         except Exception as e:
             logger.warning("Background finalize failed for %s (%s)", session_id, e)
         else:
@@ -439,7 +592,8 @@ async def finalize(session_id: str):
         notes = await finalize_session(session_id)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"重新整併失敗：{type(e).__name__}: {e}")
-    return {"session_id": session_id, "text": notes, "html": MARKDOWN.render(notes)}
+    return {"session_id": session_id, "text": notes, "html": MARKDOWN.render(notes),
+            "files": download_links(session_id)}
 
 
 @app.get("/sessions/incomplete")
@@ -484,7 +638,7 @@ async def bundle(session_id: str):
     if not re.fullmatch(SESSION_ID_PATTERN, session_id):
         raise HTTPException(status_code=404)
     session_dir = session_dir_for(session_id)
-    present = [name for name in BUNDLE_FILES if (session_dir / name).exists()]
+    present = session_files(session_id, BUNDLE_FILES)
     if not present:
         raise HTTPException(status_code=404)
 
@@ -507,10 +661,15 @@ async def bundle(session_id: str):
 async def download(session_id: str, filename: str):
     allowed = {"lecture.wav", "transcript.txt", "live_notes.md", "final_notes.md",
                "final_notes.html", "session.json"}
+    allowed |= {f"final_notes.{lang}.{ext}"
+                for lang in TRANSLATION_LANGUAGES for ext in ("md", "html")}
     if not re.fullmatch(r"\d{8}_\d{6}", session_id) or filename not in allowed:
         raise HTTPException(status_code=404)
-    path = session_dir_for(session_id) / filename
-    if not path.exists():
+    session_dir = session_dir_for(session_id)
+    path = session_dir / filename
+    # is_current keeps a superseded translation from being served through a link kept
+    # from before the re-merge.
+    if not path.exists() or not is_current(session_dir, filename):
         raise HTTPException(status_code=404)
     return FileResponse(path, filename=filename)
 
@@ -968,18 +1127,23 @@ async def websocket_endpoint(ws: WebSocket):
              "user_notes": user_notes, "corrections": corrections},
             ensure_ascii=False, indent=2), encoding="utf-8")
 
-        final_status = FINAL_STATUS_OK
-        try:
-            final_notes = await call_anthropic_text(
-                final_prompt(chapters, remaining, course_title, user_notes, corrections),
-                retry_delays=FINAL_RETRY_DELAYS)
-        except Exception as e:
-            final_status = FINAL_STATUS_FAILED
-            final_notes = final_fallback_notes(course_title, chapters, remaining, e)
+        # The merge runs inside the lock, not just the writing. The user can press "re-merge"
+        # while this one is still waiting on the API; if that run succeeds and this one then
+        # fails, a fallback written afterwards would bury the good notes.
+        async with session_lock(session_id):
+            final_status = FINAL_STATUS_OK
+            try:
+                final_notes = await call_anthropic_text(
+                    final_prompt(chapters, remaining, course_title, user_notes, corrections),
+                    retry_delays=FINAL_RETRY_DELAYS)
+            except Exception as e:
+                final_status = FINAL_STATUS_FAILED
+                final_notes = final_fallback_notes(course_title, chapters, remaining, e)
 
-        # Appended on both paths: a failed merge must not cost the user their own words.
-        final_notes = append_user_notes_section(final_notes, user_notes)
-        write_final_outputs(paths, course_title, final_notes)
+            # Appended on both paths: a failed merge must not cost the user their own words.
+            final_notes = append_user_notes_section(final_notes, user_notes)
+            final_notes, final_status = await publish_final_notes(
+                session_id, paths, course_title, final_notes, final_status)
         duration = await get_audio_elapsed()
         meta = {
             "session_id": session_id,
@@ -1009,15 +1173,7 @@ async def websocket_endpoint(ws: WebSocket):
             await safe_send({
                 "type": "saved",
                 "session_id": session_id,
-                "files": {
-                    "audio": f"/download/{session_id}/lecture.wav",
-                    "transcript": f"/download/{session_id}/transcript.txt",
-                    "live_notes": f"/download/{session_id}/live_notes.md",
-                    "final_notes": f"/download/{session_id}/final_notes.md",
-                    "final_html": f"/download/{session_id}/final_notes.html",
-                    "metadata": f"/download/{session_id}/session.json",
-                    "bundle": f"/bundle/{session_id}",
-                },
+                "files": download_links(session_id),
             })
             await safe_send({"type": "status", "text": "本堂課筆記整理完成。"})
             try:

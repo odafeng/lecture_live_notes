@@ -149,7 +149,12 @@ function settleReady(error) {
 }
 function renderDownloads(files) {
   downloadsEl.replaceChildren();
-  const labels = {final_notes: ["完整筆記", "MD"], final_html: ["完整筆記 HTML", "HTML"], bundle: ["整包下載", "ZIP"], live_notes: ["即時筆記", "MD"], transcript: ["逐字稿", "TXT"], audio: ["錄音 WAV", "WAV"], metadata: ["課堂資訊", "JSON"]};
+  const labels = {final_notes: ["完整筆記", "MD"], final_html: ["完整筆記 HTML", "HTML"],
+    final_en: ["完整筆記 English", "MD"], final_en_html: ["完整筆記 English HTML", "HTML"],
+    final_de: ["完整筆記 Deutsch", "MD"], final_de_html: ["完整筆記 Deutsch HTML", "HTML"],
+    final_pl: ["完整筆記 Polski", "MD"], final_pl_html: ["完整筆記 Polski HTML", "HTML"],
+    final_es: ["完整筆記 Español", "MD"], final_es_html: ["完整筆記 Español HTML", "HTML"],
+    bundle: ["整包下載", "ZIP"], live_notes: ["即時筆記", "MD"], transcript: ["逐字稿", "TXT"], audio: ["錄音 WAV", "WAV"], metadata: ["課堂資訊", "JSON"]};
   for (const [key, [label, type]] of Object.entries(labels)) {
     if (!files[key]) continue;
     const a = document.createElement("a");
@@ -179,6 +184,7 @@ async function runFinalize(sessionId, button) {
     if (!response.ok) throw new Error(body.detail || `伺服器回應 ${response.status}`);
     finalPanel.hidden = false;
     finalEl.innerHTML = body.html;
+    renderDownloads(body.files || {});
     remergeBtn.hidden = false;
     currentSessionId = sessionId;
     $("notice").hidden = true;

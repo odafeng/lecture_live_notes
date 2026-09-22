@@ -4,7 +4,7 @@
 
 上課時麥克風持續收音，音訊串到 Gemini 3.5 Transcribe Live 做即時語音辨識，Claude Haiku 4.5 每分鐘把已確認的逐字稿整理成一段筆記。下課按停止，再把整堂課的分段筆記整併成一份完整的複習筆記。全部跑在你自己的電腦上，錄音檔留在本機。
 
-輸出是五個檔案：錄音 `lecture.wav`、逐字稿 `transcript.txt`、上課當下逐段產生的 `live_notes.md`、下課後整併的 `final_notes.md`，以及同一份筆記的 `final_notes.html`（可直接開、可列印）。下課後也可以按一個鍵把整堂課打包成 ZIP 帶走。所有中文都經 OpenCC 轉成臺灣正體，英文術語保留原文。
+輸出是五個檔案：錄音 `lecture.wav`、逐字稿 `transcript.txt`、上課當下逐段產生的 `live_notes.md`、下課後整併的 `final_notes.md`，以及同一份筆記的 `final_notes.html`（可直接開、可列印）。整併完成後會再把完整筆記翻成英文、德文、波蘭文與拉丁美洲西班牙文，各存成 `final_notes.en.md`、`final_notes.de.md`、`final_notes.pl.md`、`final_notes.es.md` 與各自的 HTML，方便交給讀不懂中文的同組同學。下課後也可以按一個鍵把整堂課打包成 ZIP 帶走。所有中文都經 OpenCC 轉成臺灣正體，英文術語保留原文。
 
 ## 你需要先自備兩把 API key
 

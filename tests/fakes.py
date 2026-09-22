@@ -82,6 +82,13 @@ def fake_services(output_dir, failures=0, final_delay=0):
         requests.append(prompt)
         if requests.always_fail or len(requests) <= failures:
             return httpx.Response(503)
+        if prompt.startswith("Translate the lecture notes"):
+            # Read off the instruction line only: the rules mention English in every
+            # prompt, and the notes themselves may quote an instruction.
+            first = prompt.splitlines()[0]
+            language = next(l for l in app.TRANSLATION_LANGUAGES.values()
+                            if first == f"Translate the lecture notes below into {l}.")
+            return stream_response([f"# Notatki ({language})\n\n- kategoriale Variablen"])
         if "完整上課筆記" in prompt:
             if final_delay:
                 await asyncio.sleep(final_delay)
