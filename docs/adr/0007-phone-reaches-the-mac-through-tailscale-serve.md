@@ -57,9 +57,13 @@ MagicDNS 與 HTTPS Certificates。Tailscale 帳號出問題時，手機就不能
 origin，所以 Mac 改名或換 tailnet 後得重新安裝。`tailscale serve` 也固定轉到 8000，
 launcher 拿不到 8000 而改用隨機 port 時（見 #3），手機就連不到。
 
-WebSocket 經過 `tailscale serve` 是否正常，寫這份 ADR 時還沒在真實手機上驗證過；
-自動化測試只跑 localhost。音訊是 16 kHz 16-bit mono，約 32 KB/s，就算連線走 DERP relay
-也應該撐得住，但這同樣是推估，沒有量過。
+2026-09-29 在 Android 實機上驗證過：經由 `tailscale serve` 安裝 PWA、錄音、逐字稿、
+下課整併都正常。那次測試沒有量頻寬，也沒有確認連線是直連還是走 DERP relay。音訊是
+16 kHz 16-bit mono，約 32 KB/s，走 relay 應該也撐得住，但這只是推估。自動化測試仍然只跑
+localhost。
+
+Mac 必須從上課一路醒到整併完成。server、最終整併、背景重試都在 Mac 上，所有檔案也存在
+Mac 上，手機上一個都沒有。MacBook 闔上螢幕就會睡著，就算接著電源也一樣。
 
 手機網路一抖，這堂課就結束了。現行設計下 WebSocket 斷線等於下課：server 會用已經收到的內容
 收尾整併，前端顯示「連線已中斷」。手機在 Wi-Fi 與行動網路之間切換、或 Tailscale 重新連線，
