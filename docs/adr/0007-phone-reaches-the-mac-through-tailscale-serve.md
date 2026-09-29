@@ -42,8 +42,11 @@ Accepted
   用的是 `scripts/build_pwa_icons.py`，產出的 PNG 提交進 repo。
 - service worker **只攔截頁面導覽**。server 回得了就一律用 server 的回應；連不上
   （Mac 睡著、server 沒開、Tailscale 斷線）才改回一張預先快取的 `offline.html`，
-  告訴使用者問題出在哪一端。`app.js`、`styles.css`、API、`/download`、`/bundle` 都不經過
-  快取。這個 App 的一切都要靠 server 才能做，快取頁面外殼只會製造「看起來能用、按下去才失敗」
+  告訴使用者問題出在哪一端。「連不上」有兩種樣子：`fetch()` 失敗，或是一直開著的
+  `tailscale serve` 替掛掉的 server 回 502／503／504。這個 App 自己從不在頁面導覽時回這三個
+  狀態碼，所以兩種都當成連不上處理。頁面導覽一律用 `cache: "no-cache"` 向 server 確認，
+  因為 `StaticFiles` 沒送 `Cache-Control`，瀏覽器的 HTTP cache 會在 server 掛掉時拿出舊的
+  `index.html`。`app.js`、`styles.css`、API、`/download`、`/bundle` 都不經過 service worker。這個 App 的一切都要靠 server 才能做，快取頁面外殼只會製造「看起來能用、按下去才失敗」
   的狀況，還會讓舊版 `app.js` 卡在手機上。
 - 錄音期間持有 Screen Wake Lock。手機螢幕自動關閉時瀏覽器可能暫停頁面，收音就會中斷。
   頁面切到背景時瀏覽器會自動釋放鎖，回到前景時要重新取得。
