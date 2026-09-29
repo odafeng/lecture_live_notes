@@ -42,6 +42,13 @@
 - 鍵盤 focus 清楚可見；狀態以 aria-live 宣告，錯誤以 role=alert 顯示。
 - 支援 prefers-reduced-motion。自動捲動可關閉，讓使用者閱讀先前的內容。
 
+## Installed app (PWA)
+
+- `display: standalone`，底色與 `theme-color` 都用 Canvas `#f7f7f2`，啟動畫面與工作台一致。
+- 圖示由 `scripts/icon.svg` 產生：一般版保留圓角紙張；maskable 版的紙色延伸到邊緣，讓 Android 可以裁成任何形狀。
+- 離線提示頁（`offline.html`）只在連不上 server 的頁面導覽時出現。樣式內嵌、不含 script，因為出現它的時候 `styles.css` 也拿不到。只有一個主要操作「重新連線」，連回 `/`。
+- 錄音期間持有 Screen Wake Lock。拿不到時用一般 notice 提醒使用者別讓螢幕關閉，錄音不中斷。
+
 ## Notes document (final_notes.html)
 
 - 獨立檔案：樣式內嵌，不連外部字型或 CDN，不含 script，離線與列印都成立。
