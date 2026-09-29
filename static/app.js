@@ -61,8 +61,16 @@ async function keepScreenAwake(on) {
     // The lecture may have ended, or a second request won, while this one was pending.
     if (phase !== "recording" || wakeLock) { await lock.release(); return; }
     wakeLock = lock;
-    lock.addEventListener("release", () => { if (wakeLock === lock) wakeLock = null; });
+    lock.addEventListener("release", () => {
+      if (wakeLock !== lock) return;  // We released it ourselves.
+      wakeLock = null;
+      // Android can revoke the lock on a visible page, e.g. in power saving; no
+      // visibilitychange follows, so ask again now. keepScreenAwake skips hidden pages.
+      keepScreenAwake(phase === "recording");
+    });
   } catch (error) {
+    // Losing the race to a page that just went hidden is expected; it retries on return.
+    if (document.visibilityState !== "visible") return;
     showNotice("無法讓螢幕保持亮著。錄音時請別讓手機螢幕關閉，否則收音可能中斷。", "wakelock");
   }
 }

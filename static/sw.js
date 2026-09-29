@@ -15,9 +15,17 @@ self.addEventListener("activate", event => {
 });
 
 // Only page loads are touched; every other request goes to the network as if this worker did
-// not exist. fetch() rejects only when the server cannot be reached at all, so a 404 or 500
-// still reaches the page as is.
+// not exist. A page load fails two ways: fetch() rejects when nothing answers at all, and the
+// persistent `tailscale serve` proxy answers a gateway error while the server behind it is
+// down. The app never serves a page with those codes, so both mean the server is unreachable.
+// A 404 or 500 still reaches the page as is.
+// no-cache makes every page load ask the server: StaticFiles sends no Cache-Control, so the
+// HTTP cache would otherwise hand back a stale index.html while the server is down.
+const GATEWAY_ERRORS = [502, 503, 504];
+
 self.addEventListener("fetch", event => {
   if (event.request.mode !== "navigate") return;
-  event.respondWith(fetch(event.request).catch(() => caches.match(OFFLINE_URL)));
+  event.respondWith(fetch(event.request, {cache: "no-cache"})
+    .then(response => GATEWAY_ERRORS.includes(response.status) ? caches.match(OFFLINE_URL) : response)
+    .catch(() => caches.match(OFFLINE_URL)));
 });
