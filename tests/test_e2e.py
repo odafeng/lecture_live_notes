@@ -6,7 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
 import uvicorn
@@ -290,6 +290,88 @@ class BrowserTests(unittest.TestCase):
             expect(page.locator("#transcript")).to_contain_text("新的課堂內容")
             page.locator("#followBtn").click()
             self.assertGreater(page.locator("#transcriptScroll").evaluate("e => e.scrollTop"), 0)
+
+
+# Records every wake lock request and release; the sentinel mimics WakeLockSentinel.
+FAKE_WAKE_LOCK = """
+    window.wakeLockLog = [];
+    Object.defineProperty(navigator, "wakeLock", {value: {request: async type => {
+        const sentinel = new EventTarget();
+        sentinel.released = false;
+        sentinel.release = async () => {
+            if (sentinel.released) return;
+            sentinel.released = true;
+            wakeLockLog.push("release");
+            sentinel.dispatchEvent(new Event("release"));
+        };
+        wakeLockLog.push("request:" + type);
+        window.lastWakeLock = sentinel;
+        return sentinel;
+    }}});
+"""
+
+
+class PwaTests(unittest.TestCase):
+    def setUp(self):
+        key = patch.object(app, "ANTHROPIC_API_KEY", "test-key")
+        key.start()
+        self.addCleanup(key.stop)
+
+    def test_a_dead_server_gets_an_explanation_instead_of_a_browser_error(self):
+        with ExitStack() as server:
+            url = server.enter_context(running_server())
+            with browser_page(url) as page:
+                page.wait_for_function("navigator.serviceWorker.controller !== null")
+                page.reload()
+                expect(page.get_by_role("button", name="開始上課", exact=True)).to_be_visible()
+
+                server.close()
+                page.reload()
+                expect(page.get_by_role("heading", name="連不上 Mac 上的課堂服務")).to_be_visible()
+                expect(page.get_by_role("link", name="重新連線")).to_have_attribute("href", "/")
+
+    def test_requests_other_than_page_loads_are_never_answered_from_cache(self):
+        with ExitStack() as server:
+            url = server.enter_context(running_server())
+            with browser_page(url) as page:
+                page.wait_for_function("navigator.serviceWorker.controller !== null")
+                server.close()
+                for path in ("/health", "/app.js", "/offline.html", "/download/20260101/000000/transcript.txt"):
+                    with self.subTest(path=path):
+                        # no-store skips the HTTP cache, so only the service worker could answer.
+                        outcome = page.evaluate("""path => fetch(path, {cache: "no-store"})
+                            .then(r => 'answered ' + r.status, () => 'failed')""", path)
+                        self.assertEqual(outcome, "failed")
+
+    def test_screen_stays_awake_only_while_recording(self):
+        with tempfile.TemporaryDirectory() as output, fake_services(output), running_server() as url, \
+                browser_page(url, 390, setup_script=FAKE_WAKE_LOCK) as page:
+            page.get_by_role("button", name="開始上課", exact=True).click()
+            expect(page.locator("body")).to_have_attribute("data-phase", "recording")
+            page.wait_for_function("wakeLockLog.length === 1")
+
+            # The browser drops the lock when the page is hidden; coming back takes it again.
+            page.evaluate("lastWakeLock.release()")
+            page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+            page.wait_for_function("wakeLockLog.length === 3")
+
+            page.get_by_role("button", name="下課／停止").click()
+            page.wait_for_function("wakeLockLog.length === 4")
+            self.assertEqual(page.evaluate("wakeLockLog"),
+                             ["request:screen", "release", "request:screen", "release"])
+            page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+            expect(page.locator("body")).not_to_have_attribute("data-phase", "recording")
+            self.assertEqual(page.evaluate("wakeLockLog.length"), 4)
+
+    def test_a_refused_wake_lock_warns_but_keeps_recording(self):
+        script = """Object.defineProperty(navigator, "wakeLock", {value: {
+            request: async () => { throw new DOMException("low battery", "NotAllowedError"); }}});"""
+        with tempfile.TemporaryDirectory() as output, fake_services(output), running_server() as url, \
+                browser_page(url, 390, setup_script=script) as page:
+            page.get_by_role("button", name="開始上課", exact=True).click()
+            expect(page.locator("#notice")).to_contain_text("無法讓螢幕保持亮著")
+            expect(page.locator("body")).to_have_attribute("data-phase", "recording")
+            expect(page.locator("#transcript")).to_contain_text(TRADITIONAL_TRANSCRIPT)
 
 
 if __name__ == "__main__":

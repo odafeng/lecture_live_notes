@@ -12,6 +12,7 @@ let transcriptCount = 0;
 let noteCount = 0;
 let currentSessionId = null;
 let noteKind = "note";
+let wakeLock = null;
 
 const $ = id => document.getElementById(id);
 const startBtn = $("startBtn"), stopBtn = $("stopBtn"), markBtn = $("markBtn");
@@ -43,7 +44,30 @@ function setPhase(next) {
   customVocabularyEl.disabled = busy;
   transcriptionModeEl.disabled = busy;
   $("startLabel").textContent = ({connecting: "連線中…", finalizing: "整理筆記中…", complete: "開始新課堂"})[next] || "開始上課";
+  keepScreenAwake(next === "recording");
 }
+// A phone that dims and locks mid-lecture can suspend the page, and the audio with it.
+async function keepScreenAwake(on) {
+  if (!("wakeLock" in navigator)) return;
+  if (!on) {
+    const lock = wakeLock;
+    wakeLock = null;
+    if (lock) await lock.release();
+    return;
+  }
+  if (wakeLock || document.visibilityState !== "visible") return;
+  try {
+    const lock = await navigator.wakeLock.request("screen");
+    // The lecture may have ended, or a second request won, while this one was pending.
+    if (phase !== "recording" || wakeLock) { await lock.release(); return; }
+    wakeLock = lock;
+    lock.addEventListener("release", () => { if (wakeLock === lock) wakeLock = null; });
+  } catch (error) {
+    showNotice("無法讓螢幕保持亮著。錄音時請別讓手機螢幕關閉，否則收音可能中斷。", "wakelock");
+  }
+}
+// The browser drops the lock whenever the page is hidden; take it back on return.
+document.addEventListener("visibilitychange", () => keepScreenAwake(phase === "recording"));
 function showNotice(text, source = "general") {
   $("noticeText").textContent = text;
   $("notice").dataset.source = source;
@@ -410,3 +434,6 @@ transcriptionModeEl.addEventListener("change", () => {
 courseTitleEl.addEventListener("input", () => { $("workspaceTitle").textContent = courseTitleEl.value.trim() || "今天，專心上課。"; });
 remergeBtn.addEventListener("click", () => { if (currentSessionId) runFinalize(currentSessionId, remergeBtn); });
 checkIncompleteSessions();
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(error => console.warn("Service worker 註冊失敗", error));
+}

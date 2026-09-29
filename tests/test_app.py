@@ -837,5 +837,47 @@ class Translations(unittest.TestCase):
         self.assertFalse((self.paths["dir"] / "final_notes.pl.md").exists())
 
 
+class PwaAssetTests(unittest.TestCase):
+    def setUp(self):
+        key = patch.object(app, "ANTHROPIC_API_KEY", "test-key")
+        key.start()
+        self.addCleanup(key.stop)
+        self.client = self.enterContext(TestClient(app.app))
+
+    def test_the_page_points_at_a_manifest_android_can_install(self):
+        self.assertIn('<link rel="manifest" href="/manifest.webmanifest" />', self.client.get("/").text)
+        response = self.client.get("/manifest.webmanifest")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "application/manifest+json")
+        manifest = response.json()
+        self.assertEqual(manifest["short_name"], "Lecture")
+        self.assertEqual(manifest["start_url"], "/")
+        self.assertEqual(manifest["display"], "standalone")
+        self.assertEqual({(i["sizes"], i["purpose"]) for i in manifest["icons"]},
+                         {("192x192", "any"), ("512x512", "any"), ("512x512", "maskable")})
+
+    def test_every_manifest_icon_is_a_png_of_the_size_it_claims(self):
+        for icon in self.client.get("/manifest.webmanifest").json()["icons"]:
+            with self.subTest(icon=icon["src"]):
+                response = self.client.get(icon["src"])
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers["content-type"], "image/png")
+                png = response.content
+                self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+                width, height = int.from_bytes(png[16:20]), int.from_bytes(png[20:24])
+                self.assertEqual(f"{width}x{height}", icon["sizes"])
+
+    def test_service_worker_and_its_offline_page_are_served_from_the_root(self):
+        worker = self.client.get("/sw.js")
+        self.assertEqual(worker.status_code, 200)
+        self.assertIn("javascript", worker.headers["content-type"])
+        self.assertIn("/offline.html", worker.text)
+        offline = self.client.get("/offline.html")
+        self.assertEqual(offline.status_code, 200)
+        # It is shown precisely when styles.css cannot be fetched.
+        self.assertNotIn("styles.css", offline.text)
+        self.assertNotIn("<script", offline.text)
+
+
 if __name__ == "__main__":
     unittest.main()
