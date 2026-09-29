@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#f7f7f2" />
+  <title>Lecture — 連不上課堂服務</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f7f2; color: #283d33;
+      font: 16px/1.7 "Avenir Next", "PingFang TC", "Microsoft JhengHei", sans-serif; }
+    main { max-width: 30rem; padding: 32px 24px; }
+    h1 { font: 600 1.5rem/1.4 "Iowan Old Style", "Songti TC", "Noto Serif TC", serif; margin: 0 0 12px; }
+    ul { padding-left: 1.2em; }
+    a { display: inline-block; margin-top: 8px; padding: 10px 18px; border-radius: 8px; background: #315745;
+      color: #fffefa; text-decoration: none; }
+    a:hover { background: #244735; }
+    a:focus-visible { outline: 3px solid #283d33; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>連不上 Mac 上的課堂服務</h1>
+    <p>這支手機現在碰不到錄音用的 server。請檢查：</p>
+    <ul>
+      <li>Mac 醒著，而且已經開啟 Lecture.app</li>
+      <li>Mac 與手機的 Tailscale 都已連線</li>
+      <li>Mac 上的 <code>tailscale serve</code> 仍在執行</li>
+    </ul>
+    <a href="/">重新連線</a>
+  </main>
+</body>
+</html>

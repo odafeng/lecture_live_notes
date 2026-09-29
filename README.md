@@ -91,6 +91,37 @@ macOS 可以建置一個 `Lecture.app`，雙擊就開，不用碰 Terminal：
 
 Windows 沒有對應的啟動器，請用上面的 `uvicorn` 指令啟動。
 
+## 用 Android 手機上課
+
+server 照樣在 Mac 上跑，手機只負責收音和顯示。兩台之間透過 [Tailscale](https://tailscale.com/)
+連線，理由寫在 `docs/adr/0007-phone-reaches-the-mac-through-tailscale-serve.md`。
+
+第一次設定：
+
+1. Mac 和手機都安裝 Tailscale，登入同一個帳號。
+2. 到 Tailscale 管理後台的 DNS 頁面，開啟 **MagicDNS** 和 **HTTPS Certificates**。
+3. 在 Mac 上打開 `Lecture.app`（或用 `uvicorn` 啟動），再執行：
+
+   ```bash
+   tailscale serve --bg 8000
+   tailscale serve status        # 會印出 https://<mac 名稱>.<tailnet>.ts.net
+   ```
+
+   `--bg` 會讓設定一直保留，Mac 重開機後不必再下一次。要關掉時用 `tailscale serve reset`。
+4. 手機用 Chrome 打開上一步印出的網址，從選單選「安裝應用程式」（有些版本叫「加到主畫面」）。
+
+之後每堂課：確認 Mac 醒著、`Lecture.app` 開著，再從手機主畫面點 Lecture。Mac 沒開或 Tailscale
+沒連上時，App 會顯示一頁說明，告訴你該檢查哪一端。
+
+手機上課要注意：
+
+- **錄音時讓 App 留在前景。** 錄音期間 App 會讓螢幕保持亮著，但你切到別的 App 後手機是否繼續
+  收音，還沒實測過。
+- **網路一斷，這堂課就結束了。** 在 Wi-Fi 與行動網路之間切換也算。已經收到的內容會照常整併，
+  但斷線之後的部分不會補回來。
+- **`tailscale serve` 固定轉到 8000。** `Lecture.app` 遇到 8000 被占用時會改用別的 port，
+  這時手機會連不上；把占用 8000 的程式關掉，再重開 `Lecture.app`。
+
 ## 需要知道的限制
 
 - **網路品質會直接影響結果。** 語音辨識走 WebSocket，摘要走 HTTPS，兩者都對不穩的連線敏感。專案為此做了串流摘要、分層重試與整併失敗後的重跑機制（見 `docs/adr/`），但爛網路仍會讓逐字稿斷續。
