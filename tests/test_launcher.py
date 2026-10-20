@@ -121,7 +121,7 @@ class LauncherTests(unittest.TestCase):
                 self.assertNotEqual(state["port"], occupied_port)
                 self.assertEqual(state["pid"], children[0].pid)
                 with launcher.HTTP.open(urls[0] + "/health") as response:
-                    self.assertEqual(json.load(response)["summary_provider"], "anthropic")
+                    self.assertEqual(json.load(response)["summary_provider"], "gemini")
                 for path, expected in (("/", "課堂筆記工作台"), ("/styles.css", ":root"),
                                        ("/app.js", "startRecording")):
                     with launcher.HTTP.open(urls[0] + path) as response:

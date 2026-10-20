@@ -14,7 +14,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 import app
-from tests.fakes import sse, stream_response
+from tests.fakes import candidate, sse, stream_response
 
 
 def translation_target(prompt):
@@ -40,18 +40,17 @@ class BrokenStream(httpx.AsyncByteStream):
 
 
 def truncated_stream(text):
-    event = {"type": "content_block_delta", "index": 0,
-             "delta": {"type": "text_delta", "text": text}}
-    body = f"event: content_block_delta\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+    body = f"data: {json.dumps(candidate([{'text': text}]), ensure_ascii=False)}\n\n"
     return httpx.Response(200, headers={"content-type": "text/event-stream"},
                           stream=BrokenStream(body.encode()))
 
 
 class SummaryTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.key = patch.object(app, "ANTHROPIC_API_KEY", "test-key")
-        self.key.start()
-        self.addCleanup(self.key.stop)
+        for target, value in (("GEMINI_API_KEY", "test-key"), ("SUMMARY_MODEL", "gemini-3.5-flash")):
+            patcher = patch.object(app, target, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     async def request_with_responses(self, responses, retry_delays=None):
         requests = []
@@ -68,7 +67,7 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(app.httpx, "AsyncClient", return_value=client), \
                 patch.object(app.asyncio, "sleep", new_callable=AsyncMock) as sleep:
             try:
-                result = await app.call_anthropic_text("請整理課堂筆記。", retry_delays)
+                result = await app.call_gemini_text("請整理課堂筆記。", retry_delays)
             except Exception as exc:
                 result = exc
         return result, requests, sleep
@@ -79,18 +78,19 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(requests), 1)
         sleep.assert_not_awaited()
         request = requests[0]
-        self.assertEqual(str(request.url), "https://api.anthropic.com/v1/messages")
-        self.assertEqual(request.headers["x-api-key"], "test-key")
-        self.assertEqual(request.headers["anthropic-version"], "2023-06-01")
-        self.assertNotIn("x-goog-api-key", request.headers)
+        self.assertEqual(str(request.url), "https://generativelanguage.googleapis.com/v1beta/"
+                                           "models/gemini-3.5-flash:streamGenerateContent?alt=sse")
+        self.assertEqual(request.headers["x-goog-api-key"], "test-key")
+        self.assertNotIn("x-api-key", request.headers)
         payload = json.loads(request.content)
-        self.assertEqual(payload["model"], app.SUMMARY_MODEL)
-        self.assertEqual(payload["max_tokens"], 8192)
-        self.assertTrue(payload["stream"])
-        self.assertEqual(payload["messages"], [{"role": "user", "content": "請整理課堂筆記。"}])
+        self.assertEqual(payload["contents"],
+                         [{"role": "user", "parts": [{"text": "請整理課堂筆記。"}]}])
+        self.assertEqual(payload["generationConfig"]["maxOutputTokens"], 16384)
+        self.assertEqual(payload["generationConfig"]["thinkingConfig"],
+                         {"thinkingLevel": "minimal"})
 
     async def test_transient_http_failure_recovers(self):
-        for status in (429, 500, 502, 503, 504, 529):
+        for status in (429, 500, 502, 503, 504):
             with self.subTest(status=status):
                 result, requests, sleep = await self.request_with_responses([
                     httpx.Response(status), text_response(),
@@ -143,22 +143,28 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(requests), 1)
         sleep.assert_not_awaited()
 
-    async def test_only_text_deltas_are_returned(self):
+    async def test_thought_parts_are_not_returned(self):
         result, _, _ = await self.request_with_responses([sse([
-            {"type": "content_block_delta", "index": 0,
-             "delta": {"type": "thinking_delta", "thinking": "internal"}},
-            {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "课堂"}},
-            {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "笔记"}},
-            {"type": "message_delta", "delta": {"stop_reason": "end_turn"}},
+            candidate([{"thought": True, "text": "internal"}, {"text": "课堂"}]),
+            candidate([{"text": "笔记"}], "STOP"),
         ])])
         self.assertEqual(result, "課堂筆記")
 
     async def test_truncated_summary_is_not_reported_as_complete(self):
         result, requests, sleep = await self.request_with_responses([
-            stream_response(["未完成的笔记"], stop_reason="max_tokens"),
+            stream_response(["未完成的笔记"], finish_reason="MAX_TOKENS"),
         ])
         self.assertIsInstance(result, RuntimeError)
         self.assertIn("輸出長度上限", str(result))
+        self.assertEqual(len(requests), 1)
+        sleep.assert_not_awaited()
+
+    async def test_an_answer_the_model_cut_short_is_not_reported_as_complete(self):
+        result, requests, sleep = await self.request_with_responses([
+            stream_response(["前半段笔记"], finish_reason="SAFETY"),
+        ])
+        self.assertIsInstance(result, RuntimeError)
+        self.assertIn("SAFETY", str(result))
         self.assertEqual(len(requests), 1)
         sleep.assert_not_awaited()
 
@@ -170,20 +176,29 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(requests), 2)
         sleep.assert_awaited_once_with(2)
 
-    async def test_error_event_inside_stream_is_retried(self):
+    async def test_a_stream_that_closes_without_a_finish_reason_is_retried(self):
         result, requests, sleep = await self.request_with_responses([
-            sse([{"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}]),
+            sse([candidate([{"text": "前半段笔记"}])]), text_response("完整笔记"),
+        ])
+        self.assertEqual(result, "完整筆記")
+        self.assertEqual(len(requests), 2)
+        sleep.assert_awaited_once_with(2)
+
+    async def test_error_inside_stream_is_retried(self):
+        result, requests, sleep = await self.request_with_responses([
+            sse([{"error": {"code": 503, "message": "The model is overloaded.",
+                            "status": "UNAVAILABLE"}}]),
             text_response(),
         ])
         self.assertIsInstance(result, str)
         self.assertEqual(len(requests), 2)
         sleep.assert_awaited_once_with(2)
 
-    async def test_error_event_names_its_type_when_retries_run_out(self):
+    async def test_error_names_its_status_when_retries_run_out(self):
         result, _, _ = await self.request_with_responses(
-            [sse([{"type": "error", "error": {"type": "overloaded_error"}}]) for _ in range(4)])
+            [sse([{"error": {"code": 503, "status": "UNAVAILABLE"}}]) for _ in range(4)])
         self.assertIsInstance(result, RuntimeError)
-        self.assertIn("overloaded_error", str(result))
+        self.assertIn("UNAVAILABLE", str(result))
 
     async def test_final_merge_waits_far_longer_than_a_live_note(self):
         result, requests, sleep = await self.request_with_responses(
@@ -194,11 +209,11 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sleep.await_args_list, [call(5), call(15), call(45), call(120)])
         self.assertGreater(sum(app.FINAL_RETRY_DELAYS), 10 * sum(app.LIVE_RETRY_DELAYS))
 
-    async def test_missing_anthropic_key_does_not_send_request(self):
-        with patch.object(app, "ANTHROPIC_API_KEY", ""):
+    async def test_missing_gemini_key_does_not_send_request(self):
+        with patch.object(app, "GEMINI_API_KEY", ""):
             result, requests, sleep = await self.request_with_responses([])
         self.assertIsInstance(result, RuntimeError)
-        self.assertIn("ANTHROPIC_API_KEY", str(result))
+        self.assertIn("GEMINI_API_KEY", str(result))
         self.assertEqual(requests, [])
         sleep.assert_not_awaited()
 
@@ -274,7 +289,7 @@ class FinalizeTests(unittest.TestCase):
         # One folder per day, one subfolder per recording: lectures/YYYYMMDD/HHMMSS/.
         self.session_dir = self.output / "20260908" / "090321"
         self.session_dir.mkdir(parents=True)
-        for target, value in (("OUTPUT_DIR", self.output), ("ANTHROPIC_API_KEY", "test-key")):
+        for target, value in (("OUTPUT_DIR", self.output), ("GEMINI_API_KEY", "test-key")):
             patcher = patch.object(app, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -299,13 +314,13 @@ class FinalizeTests(unittest.TestCase):
             }, ensure_ascii=False), encoding="utf-8")
 
     @contextmanager
-    def anthropic(self, *responses):
+    def gemini(self, *responses):
         prompts = []
         outcomes = iter(responses)
         real_client = httpx.AsyncClient
 
         def respond(request):
-            prompt = json.loads(request.content)["messages"][0]["content"]
+            prompt = json.loads(request.content)["contents"][0]["parts"][0]["text"]
             prompts.append(prompt)
             if prompt.startswith("Translate the lecture notes"):
                 language = translation_target(prompt)
@@ -325,7 +340,7 @@ class FinalizeTests(unittest.TestCase):
 
     def test_rerun_replaces_the_fallback_and_clears_the_failed_status(self):
         self.write_session()
-        with self.anthropic(stream_response(["# 机器学习\n\n## 本堂课总览\n\n- 类别变项"])) as prompts, \
+        with self.gemini(stream_response(["# 机器学习\n\n## 本堂课总览\n\n- 类别变项"])) as prompts, \
                 TestClient(app.app) as client:
             response = client.post(f"/finalize/{self.SESSION}")
 
@@ -354,7 +369,7 @@ class FinalizeTests(unittest.TestCase):
 
     def test_failed_rerun_keeps_the_fallback_and_the_failed_status(self):
         self.write_session()
-        with self.anthropic(*[httpx.Response(503) for _ in range(5)]), TestClient(app.app) as client:
+        with self.gemini(*[httpx.Response(503) for _ in range(5)]), TestClient(app.app) as client:
             response = client.post(f"/finalize/{self.SESSION}")
 
         self.assertEqual(response.status_code, 502)
@@ -366,7 +381,7 @@ class FinalizeTests(unittest.TestCase):
     def test_rerun_reapplies_handwritten_notes_and_corrections(self):
         self.write_session(user_notes=["[00:12:35] 老師說這頁會考"],
                            corrections=["[00:20:01] 老師說的是 ResNet，不是 resonate"])
-        with self.anthropic(stream_response(["# 机器学习\n\n## 本堂课总览\n\n- 类别变项"])) as prompts, \
+        with self.gemini(stream_response(["# 机器学习\n\n## 本堂课总览\n\n- 类别变项"])) as prompts, \
                 TestClient(app.app) as client:
             response = client.post(f"/finalize/{self.SESSION}")
 
@@ -381,7 +396,7 @@ class FinalizeTests(unittest.TestCase):
     def test_rerun_refreshes_the_html_output_alongside_the_markdown(self):
         self.write_session()
         (self.session_dir / "final_notes.html").write_text("<p>舊的</p>", encoding="utf-8")
-        with self.anthropic(stream_response(["# 机器学习\n\n## 本堂课总览"])), TestClient(app.app) as client:
+        with self.gemini(stream_response(["# 机器学习\n\n## 本堂课总览"])), TestClient(app.app) as client:
             self.assertEqual(client.post(f"/finalize/{self.SESSION}").status_code, 200)
         document = (self.session_dir / "final_notes.html").read_text(encoding="utf-8")
         self.assertNotIn("舊的", document)
@@ -393,7 +408,7 @@ class FinalizeTests(unittest.TestCase):
         (self.session_dir / "final_notes.pl.md").write_text(
             "# Stare notatki\n", encoding="utf-8")
 
-        with self.anthropic(stream_response(["# 机器学习\n\n- 类别变项"])), \
+        with self.gemini(stream_response(["# 机器学习\n\n- 类别变项"])), \
                 TestClient(app.app) as client:
             self.assertEqual(client.post(f"/finalize/{self.SESSION}").status_code, 200)
 
@@ -405,7 +420,7 @@ class FinalizeTests(unittest.TestCase):
     def test_rerun_hands_back_the_links_including_the_new_translations(self):
         """The panel is rebuilt from this response; without it the copies stay invisible."""
         self.write_session()
-        with self.anthropic(stream_response(["# 机器学习\n\n- 类别变项"])), \
+        with self.gemini(stream_response(["# 机器学习\n\n- 类别变项"])), \
                 TestClient(app.app) as client:
             body = client.post(f"/finalize/{self.SESSION}").json()
 
@@ -470,7 +485,7 @@ class FinalizeTests(unittest.TestCase):
             real_client = httpx.AsyncClient
 
             async def respond(request):
-                merges.append(json.loads(request.content)["messages"][0]["content"])
+                merges.append(json.loads(request.content)["contents"][0]["parts"][0]["text"])
                 await asyncio.sleep(0)
                 return stream_response(["# 机器学习"])
 
@@ -485,7 +500,7 @@ class FinalizeTests(unittest.TestCase):
     def test_locks_do_not_pile_up_one_per_lecture(self):
         """A local server runs for weeks; a dict keyed by session must not grow forever."""
         self.write_session()
-        with self.anthropic(stream_response(["# 机器学习"])), TestClient(app.app) as client:
+        with self.gemini(stream_response(["# 机器学习"])), TestClient(app.app) as client:
             client.post(f"/finalize/{self.SESSION}")
         self.assertNotIn(self.SESSION, app._session_locks)
 
@@ -656,13 +671,13 @@ class ConfigurationTests(unittest.TestCase):
                 configuration = runpy.run_path(app.__file__)
                 self.assertEqual(configuration["OUTPUT_DIR"], expected)
 
-    def test_project_anthropic_key_takes_precedence_over_shell_key(self):
+    def test_project_gemini_key_takes_precedence_over_shell_key(self):
         for file_key, expected in (("project-key", "project-key"), ("", "shell-key")):
             with self.subTest(file_key=file_key), \
-                    patch("dotenv.dotenv_values", return_value={"ANTHROPIC_API_KEY": file_key}), \
-                    patch.dict(os.environ, {"ANTHROPIC_API_KEY": "shell-key"}):
+                    patch("dotenv.dotenv_values", return_value={"GEMINI_API_KEY": file_key}), \
+                    patch.dict(os.environ, {"GEMINI_API_KEY": "shell-key"}):
                 configuration = runpy.run_path(app.__file__)
-                self.assertEqual(configuration["ANTHROPIC_API_KEY"], expected)
+                self.assertEqual(configuration["GEMINI_API_KEY"], expected)
 
 
 class MarkdownTests(unittest.TestCase):
@@ -693,16 +708,16 @@ class SmokeTests(unittest.TestCase):
             self.assertEqual(health.status_code, 200)
             self.assertTrue(health.json()["ok"])
             self.assertEqual(health.json()["app_id"], "lecture-live-notes")
-            self.assertEqual(health.json()["summary_provider"], "anthropic")
-            self.assertIn("summary_api_key_configured", health.json())
+            self.assertEqual(health.json()["summary_provider"], "gemini")
+            self.assertIn("api_key_configured", health.json())
+            self.assertNotIn("summary_api_key_configured", health.json())
 
-    def test_missing_summary_key_is_reported_before_recording(self):
-        with patch.object(app, "GEMINI_API_KEY", "test-gemini-key"), \
-                patch.object(app, "ANTHROPIC_API_KEY", ""), TestClient(app.app) as client:
+    def test_missing_key_is_reported_before_recording(self):
+        with patch.object(app, "GEMINI_API_KEY", ""), TestClient(app.app) as client:
             with client.websocket_connect("/ws") as ws:
                 error = ws.receive_json()
                 self.assertEqual(error["type"], "error")
-                self.assertIn("ANTHROPIC_API_KEY", error["text"])
+                self.assertIn("GEMINI_API_KEY", error["text"])
 
 
 class Translations(unittest.TestCase):
@@ -714,9 +729,9 @@ class Translations(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
-        # The key is patched like everywhere else: without it call_anthropic_text refuses
+        # The key is patched like everywhere else: without it call_gemini_text refuses
         # before reaching the mock transport, which passes only on a machine with a real .env.
-        for target, value in (("OUTPUT_DIR", self.dir), ("ANTHROPIC_API_KEY", "test-key")):
+        for target, value in (("OUTPUT_DIR", self.dir), ("GEMINI_API_KEY", "test-key")):
             patcher = patch.object(app, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -724,13 +739,13 @@ class Translations(unittest.TestCase):
         self.paths["dir"].mkdir(parents=True, exist_ok=True)
 
     @contextmanager
-    def anthropic(self, by_language):
+    def gemini(self, by_language):
         """Answer each translation request with the text this test wants for that language."""
         prompts = []
         real_client = httpx.AsyncClient
 
         def respond(request):
-            prompt = json.loads(request.content)["messages"][0]["content"]
+            prompt = json.loads(request.content)["contents"][0]["parts"][0]["text"]
             prompts.append(prompt)
             lang = next(k for k, name in app.TRANSLATION_LANGUAGES.items()
                         if name == translation_target(prompt))
@@ -750,7 +765,7 @@ class Translations(unittest.TestCase):
         self.assertEqual(list(app.TRANSLATION_LANGUAGES), ["en", "de", "pl", "es"])
         self.assertEqual(app.TRANSLATION_LANGUAGES["es"], "Latin American Spanish")
         # The file suffix stays short; the document still declares the real BCP-47 tag.
-        with self.anthropic({lang: f"# Notes {lang}" for lang in app.TRANSLATION_LANGUAGES}):
+        with self.gemini({lang: f"# Notes {lang}" for lang in app.TRANSLATION_LANGUAGES}):
             written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
 
         self.assertEqual(written, ["en", "de", "pl", "es"])
@@ -760,7 +775,7 @@ class Translations(unittest.TestCase):
                       (self.paths["dir"] / "final_notes.pl.html").read_text(encoding="utf-8"))
 
     def test_finished_notes_get_one_copy_per_language(self):
-        with self.anthropic({"pl": "# Uczenie maszynowe\n\n- zmienne kategorialne",
+        with self.gemini({"pl": "# Uczenie maszynowe\n\n- zmienne kategorialne",
                              "de": "# Maschinelles Lernen\n\n- kategoriale Variablen"}):
             written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
 
@@ -783,7 +798,7 @@ class Translations(unittest.TestCase):
                 raise OSError("disk full")
             return real_write(self, *a, **kw)
 
-        with self.anthropic({"pl": "# Uczenie maszynowe", "de": "# Maschinelles Lernen"}), \
+        with self.gemini({"pl": "# Uczenie maszynowe", "de": "# Maschinelles Lernen"}), \
                 patch.object(Path, "write_text", refuse_polish):
             written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
 
@@ -796,7 +811,7 @@ class Translations(unittest.TestCase):
         (self.paths["dir"] / "final_notes.pl.md").write_text("# Stare\n", encoding="utf-8")
         (self.paths["dir"] / "final_notes.pl.html").write_text("<p>Stare</p>", encoding="utf-8")
 
-        with self.anthropic({"pl": httpx.ConnectError("no route"), "de": "# Maschinelles Lernen"}):
+        with self.gemini({"pl": httpx.ConnectError("no route"), "de": "# Maschinelles Lernen"}):
             asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
 
         self.assertFalse((self.paths["dir"] / "final_notes.pl.md").exists())
@@ -812,7 +827,7 @@ class Translations(unittest.TestCase):
                 raise PermissionError("read-only")
             return real_unlink(self, **kw)
 
-        with self.anthropic({"pl": httpx.ConnectError("no route"), "de": "# Maschinelles"}), \
+        with self.gemini({"pl": httpx.ConnectError("no route"), "de": "# Maschinelles"}), \
                 patch.object(Path, "unlink", refuse):
             written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
 
@@ -820,7 +835,7 @@ class Translations(unittest.TestCase):
 
     def test_the_model_is_asked_to_translate_the_whole_notes(self):
         """Without this, dropping {notes} from the prompt leaves every test green."""
-        with self.anthropic({"pl": "# Uczenie", "de": "# Maschinelles"}) as prompts:
+        with self.gemini({"pl": "# Uczenie", "de": "# Maschinelles"}) as prompts:
             asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
 
         self.assertEqual(len(prompts), len(app.TRANSLATION_LANGUAGES))
@@ -828,7 +843,7 @@ class Translations(unittest.TestCase):
             self.assertIn(self.NOTES, prompt)
 
     def test_a_failed_translation_does_not_cost_the_other_language(self):
-        with self.anthropic({"pl": httpx.ConnectError("no route"),
+        with self.gemini({"pl": httpx.ConnectError("no route"),
                              "de": "# Maschinelles Lernen"}):
             written = asyncio.run(app.write_translations(self.paths, "機器學習", self.NOTES))
 
@@ -839,7 +854,7 @@ class Translations(unittest.TestCase):
 
 class PwaAssetTests(unittest.TestCase):
     def setUp(self):
-        key = patch.object(app, "ANTHROPIC_API_KEY", "test-key")
+        key = patch.object(app, "GEMINI_API_KEY", "test-key")
         key.start()
         self.addCleanup(key.stop)
         self.client = self.enterContext(TestClient(app.app))

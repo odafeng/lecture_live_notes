@@ -2,22 +2,21 @@
 
 把整堂課錄下來，一邊上課一邊生出可以複習的中文筆記。
 
-上課時麥克風持續收音，音訊串到 Gemini 3.5 Transcribe Live 做即時語音辨識，Claude Haiku 4.5 每分鐘把已確認的逐字稿整理成一段筆記。下課按停止，再把整堂課的分段筆記整併成一份完整的複習筆記。全部跑在你自己的電腦上，錄音檔留在本機。
+上課時麥克風持續收音，音訊串到 Gemini 3.5 Transcribe Live 做即時語音辨識，Gemini 3.5 Flash 每分鐘把已確認的逐字稿整理成一段筆記。下課按停止，再把整堂課的分段筆記整併成一份完整的複習筆記。全部跑在你自己的電腦上，錄音檔留在本機。
 
 輸出是五個檔案：錄音 `lecture.wav`、逐字稿 `transcript.txt`、上課當下逐段產生的 `live_notes.md`、下課後整併的 `final_notes.md`，以及同一份筆記的 `final_notes.html`（可直接開、可列印）。整併完成後會再把完整筆記翻成英文、德文、波蘭文與拉丁美洲西班牙文，各存成 `final_notes.en.md`、`final_notes.de.md`、`final_notes.pl.md`、`final_notes.es.md` 與各自的 HTML，方便交給讀不懂中文的同組同學。下課後也可以按一個鍵把整堂課打包成 ZIP 帶走。所有中文都經 OpenCC 轉成臺灣正體，英文術語保留原文。
 
-## 你需要先自備兩把 API key
+## 你需要先自備一把 API key
 
-**這個專案不含任何 API 額度，也不代收費用。** 跑起來之前，你得自己去申請兩把 key，填進 `.env`：
+**這個專案不含任何 API 額度，也不代收費用。** 跑起來之前，你得自己去申請一把 Gemini API key，填進 `.env`：
 
 | Key | 用途 | 申請位置 |
 |---|---|---|
-| `GEMINI_API_KEY` | 即時語音辨識 | [Google AI Studio](https://aistudio.google.com/) 的 API Keys 頁面 |
-| `ANTHROPIC_API_KEY` | 把逐字稿整理成筆記 | [Anthropic Console](https://platform.claude.com/) |
+| `GEMINI_API_KEY` | 即時語音辨識，以及把逐字稿整理成筆記 | [Google AI Studio](https://aistudio.google.com/) 的 API Keys 頁面 |
 
-兩邊都是**用量計費**，帳單直接來自 Google 和 Anthropic。費率與免費額度以兩家官方公告為準，開始用之前請自己確認一次目前的方案。粗略的用量結構見下方「費用怎麼算」。
+這是**用量計費**，帳單直接來自 Google。費率與免費額度以 Google 官方公告為準，開始用之前請自己確認一次目前的方案。粗略的用量結構見下方「費用怎麼算」。
 
-沒有這兩把 key，App 會在你按下「開始上課」之前就直接擋下來並顯示錯誤，不會空跑。申請的逐步畫面說明在第 4 節。
+沒有這把 key，App 會在你按下「開始上課」之前就直接擋下來並顯示錯誤，不會空跑。申請的逐步畫面說明在第 4 節。
 
 金鑰只放在本機 `.env`，只由 Python 後端讀取，不會出現在前端頁面，也已排除在版本控制外。
 
@@ -28,15 +27,15 @@
 如果你的情況是這樣，它可能有用：
 
 - 課堂內容你有權錄音
-- 你可以接受音訊送到 Google、逐字稿送到 Anthropic 做處理
-- 你願意自己申請兩個 API key 並付用量費用
+- 你可以接受音訊與逐字稿都送到 Google 做處理
+- 你願意自己申請 Gemini API key 並付用量費用
 - 你的課有大量專有名詞，需要自訂詞彙表來提高辨識率
 
 如果你要的是會議記錄 SaaS、需要離線處理、或不能把內容送出去，這個專案不適合你。
 
 ## 隱私與授權界線
 
-**即時音訊會傳送到 Google Gemini API，逐字稿與筆記素材會傳送到 Anthropic API。** 錄音檔本身只留在你的電腦。
+**即時音訊、逐字稿與筆記素材都會傳送到 Google Gemini API。** 錄音檔本身只留在你的電腦。
 
 錄音別人講話牽涉的規範因地區與場合而異。課堂錄音通常需要授課者同意，內容可能包含其他人的發言與姓名。請自行確認你的場合允許錄音，也允許把內容送到雲端服務。這個專案不會替你判斷。
 
@@ -44,7 +43,7 @@
 
 ## 費用怎麼算
 
-兩個 API 都是用量計費，沒有訂閱制。你付給 Google 和 Anthropic，這個專案不收費也不經手。
+Gemini API 是用量計費，沒有訂閱制。你付給 Google，這個專案不收費也不經手。
 
 摘要端的呼叫結構是這樣，方便你自己估：
 
@@ -54,19 +53,19 @@
 | 章節整併 | 每累積 10 段一次（`ROLLUP_EVERY_BLOCKS`） | 那 10 段筆記 |
 | 最終整併 | 下課時一次 | 全部章節摘要 + 未整併的段落 |
 
-Claude Haiku 4.5 的定價是每百萬 token 輸入 US$1、輸出 US$5。實測一堂 48 分鐘的課，最終整併那一次是輸入 5,437 token、輸出 5,064 token。語音辨識另外由 Gemini 計費，費率以 Google 公告為準。
+摘要預設用 `gemini-3.5-flash`。Google 的[定價頁](https://ai.google.dev/gemini-api/docs/pricing)（2026-10-20 查）沒有單獨列這個名字；API 回報它實際由 `gemini-3.6-flash` 服務，而 3.6 Flash 的標準費率是每百萬 token 輸入 US$0.75、輸出 US$3.75。這是 2026 年底前的折扣價，2027 年起是 US$1.50 與 US$7.50。thinking 壓到最低（`thinkingLevel: minimal`）：簡單提示實測 thought token 為 0，但 Google 的文件說模型仍可能視請求思考，thought token 以輸出價計費、也算進輸出上限，所以實際費用隨模型與請求而變。實測一堂 48 分鐘的課，最終整併那一次是輸入 5,437 token、輸出 5,064 token；這是換模型前用 Haiku 量的數字，不同模型的 tokenizer 算出來會有出入。語音辨識另外計費，費率同樣以 Google 公告為準。
 
 把 `NOTE_WINDOW_SECONDS` 調大會減少呼叫次數，代價是筆記更新變慢，詳見第 19 節。
 
 ## 五分鐘上手
 
-需要 Python 3.10 以上、一支麥克風，以及上面說的**兩把自備 API key**。沒有 key 的話先去申請，不然跑到第四步就會卡住。
+需要 Python 3.10 以上、一支麥克風，以及上面說的**一把自備 Gemini API key**。沒有 key 的話先去申請，不然跑到第四步就會卡住。
 
 ```bash
 git clone https://github.com/odafeng/lecture_live_notes.git
 cd lecture_live_notes
 python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
-cp .env.example .env      # 用編輯器打開，填入 GEMINI_API_KEY 與 ANTHROPIC_API_KEY
+cp .env.example .env      # 用編輯器打開，填入 GEMINI_API_KEY
 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
@@ -74,7 +73,7 @@ cp .env.example .env      # 用編輯器打開，填入 GEMINI_API_KEY 與 ANTHR
 
 檔案會存在 `lectures/<日期>/<時間>/`。同一天多次錄音會放進同一個日期資料夾。
 
-第一次跑之前建議先開 http://127.0.0.1:8000/health 確認兩個 key 都讀到了（`api_key_configured` 和 `summary_api_key_configured` 都要是 `true`）。
+第一次跑之前建議先開 http://127.0.0.1:8000/health 確認 key 讀到了（`api_key_configured` 要是 `true`）。
 
 完整的逐步安裝說明在第 3 到第 8 節，包含 Windows 的指令、API key 的申請畫面，以及常見錯誤的排除方式。
 
@@ -134,7 +133,7 @@ server 照樣在 Mac 上跑，手機只負責收音和顯示。兩台之間透�
 
 - 後端：FastAPI + uvicorn，單一 WebSocket 端點處理音訊上行與筆記下行
 - 語音辨識：Gemini 3.5 Transcribe Live（WebSocket，支援自訂詞彙與 SMART／VERBATIM 兩種模式）
-- 摘要：Anthropic Messages API，串流讀取
+- 摘要：Gemini API `streamGenerateContent`，SSE 串流讀取，thinking 壓到最低
 - 前端：原生 HTML/CSS/JS，無框架、無建置步驟
 - 測試：unittest + Playwright，45 個測試涵蓋單元、WebSocket 流程與瀏覽器 E2E，全部使用假的 API 回應，不呼叫真實服務
 
@@ -168,7 +167,7 @@ Gemini 3.5 Transcribe Live
                                 ↓
                          約 60 秒一段
                                 ↓
-                         Claude Haiku 4.5
+                         Gemini 3.5 Flash
                                 ↓
                          即時課堂筆記 block
                                 ↓
@@ -220,7 +219,7 @@ https://ai.google.dev/gemini-api/docs/live-api/live-transcribe
 ### 筆記與摘要
 
 ```text
-claude-haiku-4-5-20251001
+gemini-3.5-flash
 ```
 
 用途：
@@ -229,9 +228,11 @@ claude-haiku-4-5-20251001
 - 將多個 note blocks 壓縮為 chapter summary
 - 下課後整併為 final lecture notes
 
+透過 `streamGenerateContent`（SSE 串流）呼叫，thinking 固定壓到最低（`thinkingLevel: minimal`，不保證完全不思考），單次輸出上限 16,384 token，thought token 也算在這個上限裡。2026-10-20 實測這個名字由 `gemini-3.6-flash` 服務。換模型前先確認它接受 `minimal`：同一天 `gemini-3.8-flash` 對這個設定回 400。
+
 官方模型頁：
 
-https://platform.claude.com/docs/en/models/overview
+https://ai.google.dev/gemini-api/docs/models
 
 ---
 
@@ -397,7 +398,7 @@ pip install -r requirements.txt
 
 # 4. 建立 API Keys
 
-你需要 Gemini API key（即時轉錄）和 Anthropic API key（筆記摘要）。以下先設定 Gemini。
+你需要一把 Gemini API key，即時轉錄與筆記摘要都用它。
 
 ## Step 1
 
@@ -420,12 +421,6 @@ https://ai.google.dev/gemini-api/docs/get-started
 不要把 API key 貼到 `index.html`、JavaScript 或 GitHub。
 
 這個專案的 key 放在本機 `.env`，只由 Python backend 使用。
-
-## Anthropic API key
-
-前往 https://platform.claude.com/，取得可使用 Claude Haiku 4.5 的 API key，填入 `.env` 的 `ANTHROPIC_API_KEY`。
-
-摘要直接使用 Anthropic Messages API：`https://api.anthropic.com/v1/messages`。
 
 ---
 
@@ -463,32 +458,29 @@ code .env
 
 ```env
 GEMINI_API_KEY=
-ANTHROPIC_API_KEY=
 ```
 
 改成：
 
 ```env
 GEMINI_API_KEY=你的_Gemini_API_Key
-ANTHROPIC_API_KEY=你的_Anthropic_API_Key
 ```
 
 例如：
 
 ```env
 GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxx
-ANTHROPIC_API_KEY=你的_Anthropic_API_Key
 ```
 
 不要加引號。
 
-`ANTHROPIC_API_KEY` 優先使用 `.env` 中的非空值，未填才使用 shell 環境變數，避免舊的 shell key 覆蓋專案設定。修改 `.env` 後需重啟 server。
+`GEMINI_API_KEY` 優先使用 `.env` 中的非空值，未填才使用 shell 環境變數，避免舊的 shell key 覆蓋專案設定。修改 `.env` 後需重啟 server。
 
 `.env` 其餘預設設定可以先完全不改：
 
 ```env
 TRANSCRIBE_MODEL=gemini-3.5-transcribe-live
-SUMMARY_MODEL=claude-haiku-4-5-20251001
+SUMMARY_MODEL=gemini-3.5-flash
 TRANSCRIPTION_MODE=SMART
 CUSTOM_VOCABULARY=
 NOTE_WINDOW_SECONDS=60
@@ -546,23 +538,13 @@ http://127.0.0.1:8000/health
 {
   "ok": true,
   "transcribe_model": "gemini-3.5-transcribe-live",
-  "summary_provider": "anthropic",
-  "summary_model": "claude-haiku-4-5-20251001",
-  "api_key_configured": true,
-  "summary_api_key_configured": true
+  "summary_provider": "gemini",
+  "summary_model": "gemini-3.5-flash",
+  "api_key_configured": true
 }
 ```
 
-兩把 key 都需要載入：
-
-```json
-{
-  "api_key_configured": true,
-  "summary_api_key_configured": true
-}
-```
-
-`api_key_configured` 對應 Gemini，`summary_api_key_configured` 對應 Anthropic。`false` 表示沒有讀到非空 key；`true` 僅表示已載入，不代表 API 已驗證有效。Anthropic 若回傳 `401`，請更新 `.env` 的 `ANTHROPIC_API_KEY` 並重啟 server。
+`api_key_configured` 為 `false` 表示沒有讀到非空的 `GEMINI_API_KEY`；`true` 僅表示已載入，不代表 API 已驗證有效。Gemini 若回 `400 API key not valid` 或 `403`，請更新 `.env` 的 `GEMINI_API_KEY` 並重啟 server。
 
 ---
 
@@ -810,7 +792,7 @@ App 會在即時筆記留下時間點：
 > ✍️ [00:12:35] 老師說這頁會考
 ```
 
-下課整併時，它有兩個去處：作為**最高優先的素材**交給 Claude 整進正文，同時由後端在
+下課整併時，它有兩個去處：作為**最高優先的素材**交給模型整進正文，同時由後端在
 `final_notes.md` 末尾原文附上一整段 `## 我的課堂筆記（原文）`。原文那一段是程式拼接的，
 不是請模型照抄，所以你寫的字一個都不會被改寫掉。
 
@@ -1398,19 +1380,19 @@ http://127.0.0.1:8000/health
 
 HTTP / API 429 通常代表 quota 或 rate limit。
 
-轉錄錯誤請檢查 Google AI Studio / Gemini API 的使用量與 quota；摘要錯誤請檢查 Anthropic Console 的使用量與限額。
+轉錄與摘要走同一把 Gemini key，請檢查 Google AI Studio / Gemini API 的使用量與 quota。
 
 如果只有 summary request 429，而 ASR 還在跑，`lecture.wav` 和 finalized transcript 仍可繼續保存；摘要部分可能會顯示錯誤訊息。
 
-### 摘要出現 529、503，或暫時連線失敗
+### 摘要出現 503，或暫時連線失敗
 
-Anthropic 的 `529 overloaded_error` 表示服務暫時過載。摘要請求遇到 `429`、`500`、`502`、`503`、`504`、`529` 或網路傳輸錯誤時，最多嘗試 4 次，重試前分別等待 2、4、8 秒。分段筆記、章節摘要與最終筆記皆使用相同的重試流程。
+Gemini 的 `503 UNAVAILABLE` 表示模型暫時過載。摘要請求遇到 `429`、`500`、`502`、`503`、`504` 或網路傳輸錯誤時，最多嘗試 4 次，重試前分別等待 2、4、8 秒。分段筆記、章節摘要與最終筆記皆使用相同的重試流程。
 
 重試期間仍持續接收錄音與逐字稿。若持續失敗，分段筆記會保留繁體逐字稿片段，最終筆記則保留已完成的摘要與尚未整併的筆記，並附上失敗原因。重試無法保證服務恢復；API key 或參數等 `400`、`401`、`403`、`404` 錯誤不會重試。
 
-若摘要達到單次 8,192 tokens 的輸出上限，App 會回報未完成並保留素材，不會把截斷的結果當成完整筆記。
+若摘要達到單次 16,384 tokens 的輸出上限，或模型以 `SAFETY` 等理由中途停止輸出，App 會回報未完成並保留素材，不會把截斷的結果當成完整筆記。
 
-官方說明：https://platform.claude.com/docs/en/api/errors
+官方說明：https://ai.google.dev/gemini-api/docs/troubleshooting
 
 ---
 
@@ -1476,7 +1458,7 @@ lectures/<日期>/<時間>/
 `final_notes.md` 開頭出現這行，表示最後一次整併沒有成功：
 
 ```text
-最終整併失敗：RuntimeError: Anthropic 摘要請求失敗（ConnectError），已嘗試 5 次。
+最終整併失敗：RuntimeError: Gemini 摘要請求失敗（ConnectError），已嘗試 5 次。
 ```
 
 素材沒有丟。錯誤訊息下面就是章節摘要和還沒整併的筆記，逐字稿、即時筆記和錄音也都完整。
@@ -1541,7 +1523,7 @@ lecture.wav
 
 同時，錄音中的 audio chunks 會透過網路送往 Gemini API 做 transcription。
 
-已確認的逐字稿與筆記素材會傳送到 Anthropic API，由 Claude Haiku 整理成筆記。
+已確認的逐字稿與筆記素材也會傳送到 Gemini API，由 Gemini Flash 整理成筆記。
 
 因此這不是「完全 local」的錄音系統。
 
@@ -1632,7 +1614,7 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000
 
 # 26. 開發測試
 
-測試使用 Python 內建 `unittest`；瀏覽器 E2E 使用 Playwright。Gemini 轉錄、Anthropic 摘要與麥克風均使用測試資料，不呼叫真實 API，輸出寫入暫存目錄。
+測試使用 Python 內建 `unittest`；瀏覽器 E2E 使用 Playwright。Gemini 轉錄、Gemini 摘要與麥克風均使用測試資料，不呼叫真實 API，輸出寫入暫存目錄。
 
 ```bash
 .venv/bin/python -m pip install -r requirements-dev.txt
