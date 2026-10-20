@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted（2026-09-08）
+Accepted（2026-09-08）。2026-10-20 起摘要端點改為 Gemini（ADR 0008）：串流讀取的決定沿用，SSE 的事件形狀、例外名稱與測試 fixture 隨之更換，下文的 Anthropic 細節自此只是歷史紀錄。
 
 ## Context
 

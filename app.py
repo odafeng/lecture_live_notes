@@ -30,13 +30,13 @@ load_dotenv(BASE_DIR / ".env")
 SAMPLE_RATE = 16_000
 BYTES_PER_SAMPLE = 2
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-ANTHROPIC_API_KEY = (
-    dotenv_values(BASE_DIR / ".env").get("ANTHROPIC_API_KEY")
-    or os.getenv("ANTHROPIC_API_KEY", "")
+# The project's .env wins over a key exported in the shell, so a stale export cannot override it.
+GEMINI_API_KEY = (
+    dotenv_values(BASE_DIR / ".env").get("GEMINI_API_KEY")
+    or os.getenv("GEMINI_API_KEY", "")
 ).strip()
 TRANSCRIBE_MODEL = os.getenv("TRANSCRIBE_MODEL", "gemini-3.5-transcribe-live")
-SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "claude-haiku-4-5-20251001")
+SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gemini-3.5-flash")
 TRANSCRIPTION_MODE = os.getenv("TRANSCRIPTION_MODE", "SMART").upper()
 DEFAULT_CUSTOM_VOCABULARY = [
     x.strip() for x in os.getenv("CUSTOM_VOCABULARY", "").split(",") if x.strip()
@@ -82,9 +82,16 @@ GEMINI_WS_URL = (
     "wss://generativelanguage.googleapis.com/ws/"
     "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
 )
-ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
+GEMINI_GENERATE_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    "{model}:streamGenerateContent?alt=sse"
+)
+# Thinking tokens are billed as output and count against maxOutputTokens, so a thinking pass can
+# eat the whole budget and return an empty, truncated answer. The summaries never needed one.
+SUMMARY_GENERATION_CONFIG = {"maxOutputTokens": 16384,
+                             "thinkingConfig": {"thinkingLevel": "minimal"}}
 
-app = FastAPI(title="Lecture Live Notes — Gemini Transcribe Live + Claude Haiku")
+app = FastAPI(title="Lecture Live Notes — Gemini Transcribe Live + Gemini Flash")
 logger = logging.getLogger(__name__)
 TRADITIONAL_CHINESE = OpenCC("s2tw")
 MARKDOWN = MarkdownIt("js-default")
@@ -265,16 +272,16 @@ def render_notes_document(course_title: str, notes: str, lang: str = "zh-Hant") 
     )
 
 
-class AnthropicStreamError(Exception):
+class GeminiStreamError(Exception):
     """Retryable error reported by the server inside an SSE stream."""
 
 
-async def stream_anthropic_message(client: httpx.AsyncClient, headers: dict[str, str],
-                                   payload: dict[str, Any]) -> tuple[str, str]:
-    """Read one streamed Messages response and return its text and stop reason."""
+async def stream_gemini_content(client: httpx.AsyncClient, url: str, headers: dict[str, str],
+                                payload: dict[str, Any]) -> tuple[str, str]:
+    """Read one streamed generateContent response and return its text and finish reason."""
     parts: list[str] = []
-    stop_reason = ""
-    async with client.stream("POST", ANTHROPIC_MESSAGES_URL, headers=headers, json=payload) as response:
+    finish_reason = ""
+    async with client.stream("POST", url, headers=headers, json=payload) as response:
         if response.status_code >= 400:
             await response.aread()
             response.raise_for_status()
@@ -282,69 +289,72 @@ async def stream_anthropic_message(client: httpx.AsyncClient, headers: dict[str,
             if not line.startswith("data: "):
                 continue
             try:
-                event = json.loads(line[6:])
+                chunk = json.loads(line[6:])
             except json.JSONDecodeError:
                 continue
-            kind = event.get("type")
-            if kind == "content_block_delta":
-                delta = event.get("delta") or {}
-                if delta.get("type") == "text_delta":
-                    parts.append(str(delta.get("text", "")))
-            elif kind == "message_delta":
-                stop_reason = (event.get("delta") or {}).get("stop_reason") or stop_reason
-            elif kind == "error":
-                raise AnthropicStreamError((event.get("error") or {}).get("type", "stream_error"))
-    return "".join(parts), stop_reason
+            if "error" in chunk:
+                raise GeminiStreamError((chunk["error"] or {}).get("status", "stream_error"))
+            for candidate in chunk.get("candidates") or []:
+                for part in (candidate.get("content") or {}).get("parts") or []:
+                    if not part.get("thought"):
+                        parts.append(str(part.get("text", "")))
+                finish_reason = candidate.get("finishReason") or finish_reason
+    text = "".join(parts)
+    # The closing chunk always carries a finish reason, so a stream that ends cleanly without one
+    # was cut off somewhere in between. The partial text must not pass for a complete answer.
+    if text and not finish_reason:
+        raise GeminiStreamError("stream ended early")
+    return text, finish_reason
 
 
-async def call_anthropic_text(prompt: str, retry_delays: tuple[int, ...] | None = None) -> str:
-    if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY is not set.")
+async def call_gemini_text(prompt: str, retry_delays: tuple[int, ...] | None = None) -> str:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set.")
 
     # Resolved at call time so the module-level default stays patchable.
     if retry_delays is None:
         retry_delays = LIVE_RETRY_DELAYS
 
+    url = GEMINI_GENERATE_URL.format(model=SUMMARY_MODEL)
     payload = {
-        "model": SUMMARY_MODEL,
-        "max_tokens": 8192,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": True,
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": SUMMARY_GENERATION_CONFIG,
     }
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-    }
+    # In a header rather than the query string, so the key never lands in a logged URL.
+    headers = {"x-goog-api-key": GEMINI_API_KEY}
 
     last_attempt = len(retry_delays)
     async with httpx.AsyncClient(timeout=STREAM_TIMEOUT) as client:
         for attempt in range(last_attempt + 1):
             try:
-                text, stop_reason = await stream_anthropic_message(client, headers, payload)
+                text, finish_reason = await stream_gemini_content(client, url, headers, payload)
                 break
-            except (httpx.HTTPStatusError, httpx.TransportError, AnthropicStreamError) as e:
+            except (httpx.HTTPStatusError, httpx.TransportError, GeminiStreamError) as e:
                 if isinstance(e, httpx.HTTPStatusError):
                     status = e.response.status_code
-                    if status not in {429, 500, 502, 503, 504, 529}:
+                    if status not in {429, 500, 502, 503, 504}:
                         raise
                     reason = f"HTTP {status}"
-                elif isinstance(e, AnthropicStreamError):
+                elif isinstance(e, GeminiStreamError):
                     reason = str(e)
                 else:
                     reason = type(e).__name__
                 if attempt == last_attempt:
                     raise RuntimeError(
-                        f"Anthropic 摘要請求失敗（{reason}），已嘗試 {last_attempt + 1} 次。") from e
+                        f"Gemini 摘要請求失敗（{reason}），已嘗試 {last_attempt + 1} 次。") from e
                 delay = retry_delays[attempt]
-                logger.warning("Anthropic summary failed (%s); retrying in %s seconds (%s/%s)",
+                logger.warning("Gemini summary failed (%s); retrying in %s seconds (%s/%s)",
                                reason, delay, attempt + 1, last_attempt)
                 await asyncio.sleep(delay)
 
-    if stop_reason == "max_tokens":
-        raise RuntimeError("Anthropic 摘要達到輸出長度上限，未產生完整筆記。")
+    if finish_reason == "MAX_TOKENS":
+        raise RuntimeError("Gemini 摘要達到輸出長度上限，未產生完整筆記。")
+    # Anything else that is not STOP (SAFETY, RECITATION, ...) cut the answer short partway.
+    if finish_reason not in ("", "STOP"):
+        raise RuntimeError(f"Gemini 中止了摘要輸出（{finish_reason}），未產生完整筆記。")
     text = text.strip()
     if not text:
-        raise RuntimeError("Anthropic 未回傳可用的摘要文字。")
+        raise RuntimeError("Gemini 未回傳可用的摘要文字。")
     return TRADITIONAL_CHINESE.convert(text)
 
 
@@ -416,8 +426,8 @@ async def write_translations(paths: dict[str, Path], course_title: str,
         # The whole per-language job is isolated, writes included: the Chinese notes are already
         # on disk, so nothing here is worth losing the other language or failing the session.
         try:
-            text = await call_anthropic_text(translation_prompt(notes, language),
-                                             retry_delays=LIVE_RETRY_DELAYS)
+            text = await call_gemini_text(translation_prompt(notes, language),
+                                          retry_delays=LIVE_RETRY_DELAYS)
             markdown.write_text(text + "\n", encoding="utf-8")
             document.write_text(
                 render_notes_document(course_title, text, lang=HTML_LANG.get(lang, lang)),
@@ -509,7 +519,7 @@ async def _finalize_session(session_id: str) -> str:
     material = json.loads(paths["finalize_input"].read_text(encoding="utf-8"))
     course_title = material.get("course_title", "")
     user_notes = material.get("user_notes") or []
-    notes = await call_anthropic_text(
+    notes = await call_gemini_text(
         final_prompt(material.get("chapters", ""), material.get("remaining", ""),
                      course_title, user_notes, material.get("corrections") or []),
         retry_delays=FINAL_RETRY_DELAYS,
@@ -680,10 +690,9 @@ async def health():
         "ok": True,
         "app_id": "lecture-live-notes",
         "transcribe_model": TRANSCRIBE_MODEL,
-        "summary_provider": "anthropic",
+        "summary_provider": "gemini",
         "summary_model": SUMMARY_MODEL,
         "api_key_configured": bool(GEMINI_API_KEY),
-        "summary_api_key_configured": bool(ANTHROPIC_API_KEY),
     }
 
 
@@ -705,14 +714,6 @@ async def websocket_endpoint(ws: WebSocket):
         await safe_send({
             "type": "error",
             "text": "伺服器尚未設定 GEMINI_API_KEY。請先在 .env 填入 Gemini API key。",
-        })
-        await ws.close()
-        return
-
-    if not ANTHROPIC_API_KEY:
-        await safe_send({
-            "type": "error",
-            "text": "伺服器尚未設定 ANTHROPIC_API_KEY。請先在 .env 填入 Anthropic API key。",
         })
         await ws.close()
         return
@@ -990,7 +991,7 @@ async def websocket_endpoint(ws: WebSocket):
             end_ts = format_elapsed(last_elapsed)
 
             try:
-                block = await call_anthropic_text(
+                block = await call_gemini_text(
                     lecture_note_prompt(text, start_ts, end_ts, corrections))
             except Exception as e:
                 block = TRADITIONAL_CHINESE.convert(
@@ -1013,7 +1014,7 @@ async def websocket_endpoint(ws: WebSocket):
                 del note_blocks[:ROLLUP_EVERY_BLOCKS]
                 range_label = f"截至 {end_ts}"
                 try:
-                    chapter = await call_anthropic_text(
+                    chapter = await call_gemini_text(
                         rollup_prompt("\n\n".join(group), range_label, corrections))
                     chapter_summaries.append(chapter)
                     await safe_send({"type": "chapter", "text": chapter})
@@ -1133,7 +1134,7 @@ async def websocket_endpoint(ws: WebSocket):
         async with session_lock(session_id):
             final_status = FINAL_STATUS_OK
             try:
-                final_notes = await call_anthropic_text(
+                final_notes = await call_gemini_text(
                     final_prompt(chapters, remaining, course_title, user_notes, corrections),
                     retry_delays=FINAL_RETRY_DELAYS)
             except Exception as e:
@@ -1151,7 +1152,7 @@ async def websocket_endpoint(ws: WebSocket):
             "started_at": session_id,
             "audio_seconds": round(duration, 1),
             "transcribe_model": TRANSCRIBE_MODEL,
-            "summary_provider": "anthropic",
+            "summary_provider": "gemini",
             "summary_model": SUMMARY_MODEL,
             "transcription_mode": transcription_mode,
             "custom_vocabulary": custom_vocabulary,

@@ -17,24 +17,26 @@ FINAL = ("# 机器学习\n\n## 核心概念\n\n- **重点**：连续变项 conti
          "[危险](javascript:alert%281%29)")
 
 
-def sse(events):
-    """Encode Anthropic streaming events the way the Messages API sends them."""
-    body = "".join(f"event: {e['type']}\ndata: {json.dumps(e, ensure_ascii=False)}\n\n"
-                   for e in events)
+def sse(chunks):
+    """Encode streamed generateContent chunks the way the Gemini API sends them with alt=sse."""
+    body = "".join(f"data: {json.dumps(c, ensure_ascii=False)}\n\n" for c in chunks)
     return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
 
 
-def stream_response(chunks, stop_reason="end_turn"):
-    events = [{"type": "message_start", "message": {"id": "msg_test", "content": []}},
-              {"type": "content_block_start", "index": 0,
-               "content_block": {"type": "text", "text": ""}}]
-    events += [{"type": "content_block_delta", "index": 0,
-                "delta": {"type": "text_delta", "text": chunk}} for chunk in chunks]
-    events += [{"type": "content_block_stop", "index": 0},
-               {"type": "message_delta", "delta": {"stop_reason": stop_reason},
-                "usage": {"output_tokens": 9}},
-               {"type": "message_stop"}]
-    return sse(events)
+def candidate(parts, finish_reason=None):
+    """One streamed chunk. The real stream puts the finish reason on its last chunk only."""
+    chunk = {"candidates": [{"content": {"parts": parts, "role": "model"}, "index": 0}],
+             "modelVersion": "gemini-3.6-flash"}
+    if finish_reason:
+        chunk["candidates"][0]["finishReason"] = finish_reason
+    return chunk
+
+
+def stream_response(chunks, finish_reason="STOP"):
+    body = [candidate([{"text": chunk}]) for chunk in chunks]
+    # As the API actually closes a stream: an empty text part carrying the finish reason.
+    body.append(candidate([{"text": "", "thoughtSignature": "sig"}], finish_reason))
+    return sse(body)
 
 
 class FakeGeminiSocket:
@@ -65,7 +67,7 @@ class FakeGeminiSocket:
 
 
 class Recorded(list):
-    """Prompts sent to Anthropic, plus knobs the test can turn partway through a scenario."""
+    """Prompts sent to Gemini, plus knobs the test can turn partway through a scenario."""
 
     connect = None
     always_fail = False
@@ -77,8 +79,9 @@ def fake_services(output_dir, failures=0, final_delay=0):
     real_client = httpx.AsyncClient
 
     async def respond(request):
-        assert str(request.url) == "https://api.anthropic.com/v1/messages"
-        prompt = json.loads(request.content)["messages"][0]["content"]
+        assert str(request.url) == ("https://generativelanguage.googleapis.com/v1beta/models/"
+                                    "gemini-3.5-flash:streamGenerateContent?alt=sse")
+        prompt = json.loads(request.content)["contents"][0]["parts"][0]["text"]
         requests.append(prompt)
         if requests.always_fail or len(requests) <= failures:
             return httpx.Response(503)
@@ -102,8 +105,7 @@ def fake_services(output_dir, failures=0, final_delay=0):
     with ExitStack() as stack:
         for name, value in {
             "GEMINI_API_KEY": "test-key",
-            "ANTHROPIC_API_KEY": "test-anthropic-key",
-            "SUMMARY_MODEL": "claude-haiku-4-5-20251001",
+            "SUMMARY_MODEL": "gemini-3.5-flash",
             "OUTPUT_DIR": Path(output_dir),
             "NOTE_WINDOW_SECONDS": 0,
             "GEMINI_FINALIZE_GRACE_SECONDS": 0.01,

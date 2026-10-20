@@ -72,8 +72,8 @@ class WorkflowTests(unittest.TestCase):
             self.assertTrue(files["final_notes"].text.startswith("# 機器學習\n"))
             self.assertNotIn("<h1>", files["final_notes"].text)
             self.assertEqual(files["metadata"].json()["course_title"], "機器學習")
-            self.assertEqual(files["metadata"].json()["summary_provider"], "anthropic")
-            self.assertEqual(files["metadata"].json()["summary_model"], "claude-haiku-4-5-20251001")
+            self.assertEqual(files["metadata"].json()["summary_provider"], "gemini")
+            self.assertEqual(files["metadata"].json()["summary_model"], "gemini-3.5-flash")
             with wave.open(io.BytesIO(files["audio"].content)) as recording:
                 self.assertEqual(recording.readframes(recording.getnframes()), pcm)
 

@@ -334,7 +334,7 @@ FAKE_WAKE_LOCK = """
 
 class PwaTests(unittest.TestCase):
     def setUp(self):
-        key = patch.object(app, "ANTHROPIC_API_KEY", "test-key")
+        key = patch.object(app, "GEMINI_API_KEY", "test-key")
         key.start()
         self.addCleanup(key.stop)
 
