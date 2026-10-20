@@ -87,7 +87,8 @@ GEMINI_GENERATE_URL = (
     "{model}:streamGenerateContent?alt=sse"
 )
 # Thinking tokens are billed as output and count against maxOutputTokens, so a thinking pass can
-# eat the whole budget and return an empty, truncated answer. The summaries never needed one.
+# eat the whole budget and return an empty, truncated answer. The summaries never needed one;
+# minimal is the lowest level the model allows, not a promise of zero.
 SUMMARY_GENERATION_CONFIG = {"maxOutputTokens": 16384,
                              "thinkingConfig": {"thinkingLevel": "minimal"}}
 

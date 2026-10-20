@@ -53,7 +53,7 @@ Gemini API 是用量計費，沒有訂閱制。你付給 Google，這個專案�
 | 章節整併 | 每累積 10 段一次（`ROLLUP_EVERY_BLOCKS`） | 那 10 段筆記 |
 | 最終整併 | 下課時一次 | 全部章節摘要 + 未整併的段落 |
 
-摘要預設用 `gemini-3.5-flash`。Google 的[定價頁](https://ai.google.dev/gemini-api/docs/pricing)（2026-10-20 查）沒有單獨列這個名字；API 回報它實際由 `gemini-3.6-flash` 服務，而 3.6 Flash 的標準費率是每百萬 token 輸入 US$0.75、輸出 US$3.75。這是 2026 年底前的折扣價，2027 年起是 US$1.50 與 US$7.50。thinking 已關閉，不會另外產生 thinking token 的費用。實測一堂 48 分鐘的課，最終整併那一次是輸入 5,437 token、輸出 5,064 token；這是換模型前用 Haiku 量的數字，不同模型的 tokenizer 算出來會有出入。語音辨識另外計費，費率同樣以 Google 公告為準。
+摘要預設用 `gemini-3.5-flash`。Google 的[定價頁](https://ai.google.dev/gemini-api/docs/pricing)（2026-10-20 查）沒有單獨列這個名字；API 回報它實際由 `gemini-3.6-flash` 服務，而 3.6 Flash 的標準費率是每百萬 token 輸入 US$0.75、輸出 US$3.75。這是 2026 年底前的折扣價，2027 年起是 US$1.50 與 US$7.50。thinking 壓到最低（`thinkingLevel: minimal`）：簡單提示實測 thought token 為 0，但 Google 的文件說模型仍可能視請求思考，thought token 以輸出價計費、也算進輸出上限，所以實際費用隨模型與請求而變。實測一堂 48 分鐘的課，最終整併那一次是輸入 5,437 token、輸出 5,064 token；這是換模型前用 Haiku 量的數字，不同模型的 tokenizer 算出來會有出入。語音辨識另外計費，費率同樣以 Google 公告為準。
 
 把 `NOTE_WINDOW_SECONDS` 調大會減少呼叫次數，代價是筆記更新變慢，詳見第 19 節。
 
@@ -133,7 +133,7 @@ server 照樣在 Mac 上跑，手機只負責收音和顯示。兩台之間透�
 
 - 後端：FastAPI + uvicorn，單一 WebSocket 端點處理音訊上行與筆記下行
 - 語音辨識：Gemini 3.5 Transcribe Live（WebSocket，支援自訂詞彙與 SMART／VERBATIM 兩種模式）
-- 摘要：Gemini API `streamGenerateContent`，SSE 串流讀取，thinking 關閉
+- 摘要：Gemini API `streamGenerateContent`，SSE 串流讀取，thinking 壓到最低
 - 前端：原生 HTML/CSS/JS，無框架、無建置步驟
 - 測試：unittest + Playwright，45 個測試涵蓋單元、WebSocket 流程與瀏覽器 E2E，全部使用假的 API 回應，不呼叫真實服務
 
@@ -228,7 +228,7 @@ gemini-3.5-flash
 - 將多個 note blocks 壓縮為 chapter summary
 - 下課後整併為 final lecture notes
 
-透過 `streamGenerateContent`（SSE 串流）呼叫，thinking 固定關閉（`thinkingLevel: minimal`），單次輸出上限 16,384 token。2026-10-20 實測這個名字由 `gemini-3.6-flash` 服務。換模型前先確認它接受 `minimal`：同一天 `gemini-3.8-flash` 對這個設定回 400。
+透過 `streamGenerateContent`（SSE 串流）呼叫，thinking 固定壓到最低（`thinkingLevel: minimal`，不保證完全不思考），單次輸出上限 16,384 token，thought token 也算在這個上限裡。2026-10-20 實測這個名字由 `gemini-3.6-flash` 服務。換模型前先確認它接受 `minimal`：同一天 `gemini-3.8-flash` 對這個設定回 400。
 
 官方模型頁：
 

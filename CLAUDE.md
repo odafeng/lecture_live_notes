@@ -51,7 +51,7 @@ Gemini 的連線每 `SESSION_ROTATE_SECONDS`（570 秒）主動輪替，因為�
 - **OpenCC (`s2tw`) 套用在逐字稿與筆記，不套用在譯本。** 課程名稱也轉。
 - **更正是指示，手寫筆記是素材。** 更正累積成清單注入三個 prompt 並宣告「衝突時以更正為準」；手寫筆記由後端原文附加在 `USER_NOTES_HEADING` 底下，不交給模型轉述（ADR 0005）。
 - **翻譯是整併之後獨立的一步。** 不併進 `final_prompt`，整併失敗時完全跳過（ADR 0006）。
-- **摘要的 thinking 固定關閉。** Gemini 的 thought token 計入 `maxOutputTokens`，開著會把預算吃光、回傳空正文；`thinkingLevel: minimal` 寫死在 `SUMMARY_GENERATION_CONFIG`，換 `SUMMARY_MODEL` 前要先確認新模型接受它（ADR 0008）。
+- **摘要的 thinking 固定壓到最低。** Gemini 的 thought token 計入 `maxOutputTokens`，預設等級會把預算吃光、回傳空正文；`thinkingLevel: minimal` 寫死在 `SUMMARY_GENERATION_CONFIG`，它不保證完全不思考，換 `SUMMARY_MODEL` 前要先確認新模型接受它（ADR 0008）。
 - 一天一個資料夾：`lectures/YYYYMMDD/HHMMSS/`（ADR 0004）。`lectures/` 被 `.gitignore` 擋住，裡面是真實課堂內容。
 
 決策理由都在 `docs/adr/`。改到相關行為時一併更新對應的 ADR。
