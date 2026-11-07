@@ -42,12 +42,12 @@
       data-height="1080"
     >
       <div
-        id="el-01-hook"
+        id="el-board"
         class="scene"
-        data-composition-id="01-hook"
-        data-composition-src="compositions/frames/01-hook.html"
+        data-composition-id="board"
+        data-composition-src="compositions/board.html"
         data-start="0"
-        data-duration="10.5"
+        data-duration="135.95"
         data-track-index="0"
       ></div>
       <audio
@@ -58,16 +58,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-02-overview"
-        class="scene"
-        data-composition-id="02-overview"
-        data-composition-src="compositions/frames/02-overview.html"
-        data-start="10"
-        data-duration="11.25"
-        data-track-index="1"
-      ></div>
       <audio
         id="el-02-overview-voice"
         src="assets/voice/padded-02.wav"
@@ -76,16 +66,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-03-pipeline"
-        class="scene"
-        data-composition-id="03-pipeline"
-        data-composition-src="compositions/frames/03-pipeline.html"
-        data-start="20.75"
-        data-duration="15.36"
-        data-track-index="0"
-      ></div>
       <audio
         id="el-03-pipeline-voice"
         src="assets/voice/padded-03.wav"
@@ -94,16 +74,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-04-rotation"
-        class="scene"
-        data-composition-id="04-rotation"
-        data-composition-src="compositions/frames/04-rotation.html"
-        data-start="35.61"
-        data-duration="16.45"
-        data-track-index="1"
-      ></div>
       <audio
         id="el-04-rotation-voice"
         src="assets/voice/padded-04.wav"
@@ -112,16 +82,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-05-retries"
-        class="scene"
-        data-composition-id="05-retries"
-        data-composition-src="compositions/frames/05-retries.html"
-        data-start="51.56"
-        data-duration="16.78"
-        data-track-index="0"
-      ></div>
       <audio
         id="el-05-retries-voice"
         src="assets/voice/padded-05.wav"
@@ -130,16 +90,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-06-two-paths"
-        class="scene"
-        data-composition-id="06-two-paths"
-        data-composition-src="compositions/frames/06-two-paths.html"
-        data-start="67.84"
-        data-duration="16.98"
-        data-track-index="1"
-      ></div>
       <audio
         id="el-06-two-paths-voice"
         src="assets/voice/padded-06.wav"
@@ -148,16 +98,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-07-corrections"
-        class="scene"
-        data-composition-id="07-corrections"
-        data-composition-src="compositions/frames/07-corrections.html"
-        data-start="84.32000000000001"
-        data-duration="15.32"
-        data-track-index="0"
-      ></div>
       <audio
         id="el-07-corrections-voice"
         src="assets/voice/padded-07.wav"
@@ -166,16 +106,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-08-translations"
-        class="scene"
-        data-composition-id="08-translations"
-        data-composition-src="compositions/frames/08-translations.html"
-        data-start="99.14000000000001"
-        data-duration="14.8"
-        data-track-index="1"
-      ></div>
       <audio
         id="el-08-translations-voice"
         src="assets/voice/padded-08.wav"
@@ -184,16 +114,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-09-phone"
-        class="scene"
-        data-composition-id="09-phone"
-        data-composition-src="compositions/frames/09-phone.html"
-        data-start="113.44000000000001"
-        data-duration="15.07"
-        data-track-index="0"
-      ></div>
       <audio
         id="el-09-phone-voice"
         src="assets/voice/padded-09.wav"
@@ -202,16 +122,6 @@
         data-track-index="10"
         data-volume="1"
       ></audio>
-
-      <div
-        id="el-10-close"
-        class="scene"
-        data-composition-id="10-close"
-        data-composition-src="compositions/frames/10-close.html"
-        data-start="128.11"
-        data-duration="7.84"
-        data-track-index="1"
-      ></div>
       <audio
         id="el-10-close-voice"
         src="assets/voice/padded-10.wav"
@@ -236,37 +146,7 @@
     <script>
       window.__timelines = window.__timelines || {};
       window.__timelines["main"] = gsap.timeline({ paused: true });
-      // ── frame transitions (injected by transitions.mjs) ──
-      (function () { var tl = window.__timelines["main"];
-        tl.to("#el-01-hook", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 10);
-        tl.fromTo("#el-02-overview", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 10);
-        tl.addLabel("hf:transition:01-hook:02-overview:crossfade", 10);
-        tl.to("#el-02-overview", { x: -1920, duration: 0.5, ease: "power3.inOut" }, 20.75);
-        tl.fromTo("#el-03-pipeline", { x: 1920, opacity: 1 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.inOut" }, 20.75);
-        tl.addLabel("hf:transition:02-overview:03-pipeline:push-slide", 20.75);
-        tl.to("#el-03-pipeline", { x: -1920, duration: 0.5, ease: "power3.inOut" }, 35.61);
-        tl.fromTo("#el-04-rotation", { x: 1920, opacity: 1 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.inOut" }, 35.61);
-        tl.addLabel("hf:transition:03-pipeline:04-rotation:push-slide", 35.61);
-        tl.to("#el-04-rotation", { x: -1920, duration: 0.5, ease: "power3.inOut" }, 51.56);
-        tl.fromTo("#el-05-retries", { x: 1920, opacity: 1 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.inOut" }, 51.56);
-        tl.addLabel("hf:transition:04-rotation:05-retries:push-slide", 51.56);
-        tl.to("#el-05-retries", { x: -1920, duration: 0.5, ease: "power3.inOut" }, 67.84);
-        tl.fromTo("#el-06-two-paths", { x: 1920, opacity: 1 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.inOut" }, 67.84);
-        tl.addLabel("hf:transition:05-retries:06-two-paths:push-slide", 67.84);
-        tl.to("#el-06-two-paths", { x: -1920, duration: 0.5, ease: "power3.inOut" }, 84.32);
-        tl.fromTo("#el-07-corrections", { x: 1920, opacity: 1 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.inOut" }, 84.32);
-        tl.addLabel("hf:transition:06-two-paths:07-corrections:push-slide", 84.32);
-        tl.to("#el-07-corrections", { x: -1920, duration: 0.5, ease: "power3.inOut" }, 99.14);
-        tl.fromTo("#el-08-translations", { x: 1920, opacity: 1 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.inOut" }, 99.14);
-        tl.addLabel("hf:transition:07-corrections:08-translations:push-slide", 99.14);
-        tl.to("#el-08-translations", { x: -1920, duration: 0.5, ease: "power3.inOut" }, 113.44);
-        tl.fromTo("#el-09-phone", { x: 1920, opacity: 1 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.inOut" }, 113.44);
-        tl.addLabel("hf:transition:08-translations:09-phone:push-slide", 113.44);
-        tl.to("#el-09-phone", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 128.11);
-        tl.fromTo("#el-10-close", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 128.11);
-        tl.addLabel("hf:transition:09-phone:10-close:zoom-through", 128.11);
-        tl.to({}, { duration: 135.95 }, 0); // full-span anchor — main.duration() == composition total (Studio master duration)
-      })();
+      window.__timelines["main"].to({}, { duration: 135.95 }, 0); // full-span anchor
     </script>
   </body>
 </html>

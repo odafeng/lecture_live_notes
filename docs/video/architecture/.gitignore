@@ -12,3 +12,4 @@ node_modules/
 .hyperframes/preview/
 .hyperframes/video-state.json
 .hyperframes/history-id
+.hyperframes/render-outputs.json

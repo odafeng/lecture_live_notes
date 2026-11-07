@@ -2,7 +2,7 @@
 """Fetch the video's fonts from Google Fonts into assets/fonts/ as local woff2 files.
 
 The render machine is a clean headless Chrome, so every family must ship as a file.
-Latin faces: the full `latin` slice. CJK faces (Noto Serif TC / Noto Sans TC): subset with the
+Latin faces (Caveat, JetBrains Mono): the full `latin` slice. Noto Sans TC (300/400/500): subset with the
 `text=` parameter to exactly the characters used across STORYBOARD.md and compositions/,
 so re-run this after any copy change or a new glyph renders as a fallback font.
 """
@@ -12,10 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "assets/fonts"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36"
-LATIN = {"Newsreader-400": "Newsreader:wght@400", "HankenGrotesk-400": "Hanken+Grotesk:wght@400",
-         "HankenGrotesk-600": "Hanken+Grotesk:wght@600", "DMMono-400": "DM+Mono:wght@400"}
-CJK = {"NotoSerifTC-600": "Noto+Serif+TC:wght@600", "NotoSansTC-500": "Noto+Sans+TC:wght@500",
-       "NotoSansTC-700": "Noto+Sans+TC:wght@700"}
+LATIN = {"Caveat-600": "Caveat:wght@600", "JetBrainsMono-400": "JetBrains+Mono:wght@400"}
+CJK = {"NotoSansTC-300": "Noto+Sans+TC:wght@300", "NotoSansTC-400": "Noto+Sans+TC:wght@400",
+       "NotoSansTC-500": "Noto+Sans+TC:wght@500"}
 
 
 def get(url):
@@ -26,6 +25,7 @@ def used_chars():
     texts = [(ROOT / "STORYBOARD.md").read_text(encoding="utf-8")]
     texts += [p.read_text(encoding="utf-8") for p in (ROOT / "compositions").rglob("*.html")]
     chars = {c for t in texts for c in t if ord(c) > 0x2000}
+    chars |= {chr(c) for c in range(0x20, 0x7F)}  # Noto Sans TC also sets the Latin text
     return "".join(sorted(chars | set("０１２３４５６７８９：，。、；？！「」（）／→←↔⇄·—…")))
 
 

@@ -1,0 +1,718 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans TC"; src: url("../assets/fonts/NotoSansTC-300.woff2") format("woff2"); font-weight: 100 349; }
+    @font-face { font-family: "Noto Sans TC"; src: url("../assets/fonts/NotoSansTC-400.woff2") format("woff2"); font-weight: 350 449; }
+    @font-face { font-family: "Noto Sans TC"; src: url("../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 450 900; }
+    @font-face { font-family: "Caveat"; src: url("../assets/fonts/Caveat-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "JetBrains Mono"; src: url("../assets/fonts/JetBrainsMono-400.woff2") format("woff2"); font-weight: 100 900; }
+
+    #root {
+      position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden;
+      font-family: "Noto Sans TC", sans-serif; font-weight: 300; color: #23262E;
+    }
+    .bd-scene { position: absolute; inset: 0; overflow: hidden; background: #F7F6F2; }
+    .bd-world { position: absolute; left: 0; top: 0; width: 3600px; height: 2000px; transform-origin: 0 0; will-change: transform; }
+    .bd-dots {
+      position: absolute; left: -2600px; top: -900px; width: 9200px; height: 4400px;
+      background-image: radial-gradient(circle, rgba(35,38,46,0.11) 1.6px, transparent 1.9px);
+      background-size: 40px 40px;
+    }
+    .bd-svg { position: absolute; left: 0; top: 0; width: 3600px; height: 2000px; overflow: visible; }
+    .bd-svg path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .bd-abs { position: absolute; white-space: nowrap; }
+    .bd-head { font-weight: 500; letter-spacing: 0.02em; line-height: 1.2; }
+    .bd-sticky {
+      position: absolute; padding: 22px 26px 24px; background: #FFE58A;
+      box-shadow: 0 10px 22px rgba(35,38,46,0.14), 0 1px 0 rgba(35,38,46,0.06);
+      transform-origin: 50% 0%;
+    }
+    .bd-sticky.bd-blue { background: #D6E6FF; }
+    .bd-sticky .bd-tag { font-weight: 500; font-size: 22px; letter-spacing: 0.2em; color: rgba(35,38,46,0.62); }
+    .bd-sticky .bd-txt { margin-top: 8px; font-size: 32px; line-height: 1.4; font-weight: 400; white-space: normal; }
+    .bd-sticky .bd-src { margin-top: 12px; font-family: "JetBrains Mono", monospace; font-size: 19px; line-height: 1.5; color: rgba(35,38,46,0.7); white-space: nowrap; }
+    .bd-uline { position: relative; display: inline-block; }
+    .bd-uline svg { position: absolute; left: -4%; bottom: -0.32em; width: 108%; height: 0.45em; overflow: visible; }
+    .bd-hud { position: absolute; left: 64px; top: 46px; }
+    .bd-hud-item { position: absolute; left: -24px; top: -16px; padding: 14px 26px 10px 24px; white-space: nowrap; background: rgba(247,246,242,0.92); box-shadow: 0 0 24px 18px rgba(247,246,242,0.92); }
+    .bd-close { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; }
+    .bd-close-k { font-size: 40px; font-weight: 500; color: #1D5BD8; letter-spacing: 0.06em; }
+    .bd-close-t { margin-top: 18px; font-size: 72px; font-weight: 500; line-height: 1.35; }
+    .bd-hud .bd-hud-k { font-family: "Caveat", cursive; font-size: 34px; color: #1D5BD8; line-height: 1; }
+    .bd-hud .bd-hud-t { margin-top: 4px; font-size: 46px; font-weight: 500; line-height: 1.15; }
+    .bd-hud svg { display: block; width: 210px; height: 16px; overflow: visible; }
+  </style>
+
+  <div id="root" data-composition-id="board" data-width="1920" data-height="1080" data-duration="135.95">
+    <div class="clip bd-scene" data-start="0" data-duration="135.95" data-track-index="0">
+      <div class="bd-world" id="bd-world" data-layout-allow-overflow data-layout-allow-overlap>
+        <div class="bd-dots"></div>
+        <svg class="bd-svg" id="bd-svg" viewBox="0 0 3600 2000" xmlns="http://www.w3.org/2000/svg"></svg>
+
+        <!-- ===== hook: the notebook you can't keep up with ===== -->
+        <div class="bd-abs bd-head" id="bd-hook-title" style="left:2700px; top:1010px; font-size:64px;">一堂課，兩小時</div>
+        <div class="bd-abs bd-head" id="bd-hook-head" style="left:2080px; top:985px; font-size:84px;">只管聽課</div>
+
+        <!-- ===== overview title + tagline ===== -->
+        <div class="bd-abs bd-head" id="bd-ov-title" style="left:120px; top:96px; font-size:64px;">Lecture Live Notes</div>
+        <div class="bd-abs" id="bd-ov-five" style="left:770px; top:112px; font-family:'Caveat',cursive; font-size:48px; color:#1D5BD8;">← 5 個方塊</div>
+        <div class="bd-abs" id="bd-ov-tag" style="left:960px; top:930px; transform:translateX(-50%); font-size:38px; font-weight:300;">
+          每一個設計，都對應一個真實的<span class="bd-uline" id="bd-ul-need">需求<svg viewBox="0 0 100 10" preserveAspectRatio="none"><path pathLength="1" d="M2,6 Q50,1 98,5" stroke="#1D5BD8" stroke-width="3.2" vector-effect="non-scaling-stroke"/></svg></span>，或一次真實的<span class="bd-uline" id="bd-ul-fail">失敗<svg viewBox="0 0 100 10" preserveAspectRatio="none"><path pathLength="1" d="M2,5 Q50,9 98,4" stroke="#D9363E" stroke-width="3.2" vector-effect="non-scaling-stroke"/></svg></span>
+        </div>
+
+        <!-- ===== layer 1 stickies ===== -->
+        <div class="bd-sticky" id="bd-l1-need" style="left:100px; top:610px; width:440px; transform:rotate(-2deg);">
+          <div class="bd-tag">需求</div>
+          <div class="bd-txt">還在上課，就要有筆記</div>
+        </div>
+        <div class="bd-sticky bd-blue" id="bd-l1-design" style="left:340px; top:1560px; width:470px; transform:rotate(1.5deg);">
+          <div class="bd-tag">設計</div>
+          <div class="bd-txt">分層壓縮：逐字稿 → 段落 → 章節 → 整併</div>
+          <div class="bd-src">NOTE_WINDOW_SECONDS = 60<br>ROLLUP_EVERY_BLOCKS = 10</div>
+        </div>
+      </div>
+
+      <!-- screen-space HUD: which layer we are in (items built in JS) -->
+      <div class="bd-hud" id="bd-hud"></div>
+      <!-- closing line, screen space -->
+      <div class="bd-close" id="bd-close">
+        <div class="bd-close-k" id="bd-close-k">五個方塊，七個需求</div>
+        <div class="bd-close-t" id="bd-close-t">每一個設計，都對得上一個<br>上課時真的會發生的問題。</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+  <script>
+    (function () {
+      var NS = "http://www.w3.org/2000/svg";
+      var INK = "#23262E", BLUE = "#1D5BD8", RED = "#D9363E", GREEN = "#2B8A3E", GRAY = "#8A8F98";
+      var YELLOW = "#FFE58A", PAPER = "#FFFFFF";
+      var TOTAL = 135.95;
+      var svg = document.getElementById("bd-svg");
+      var world = document.getElementById("bd-world");
+      var $ = function (id) { return document.getElementById("bd-" + id); };
+
+      // ---------- deterministic hand-drawn geometry (seeded, no Math.random) ----------
+      var seed = 20261107;
+      function rnd() { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+      function jit(a) { return (rnd() - 0.5) * 2 * a; }
+      function f(n) { return Math.round(n * 10) / 10; }
+      // one bowed marker stroke with slight overshoot at both ends
+      function seg(x1, y1, x2, y2, first) {
+        var dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+        var os = Math.min(5, L * 0.03);
+        var sx = x1 - ux * os * rnd() + jit(1), sy = y1 - uy * os * rnd() + jit(1);
+        var ex = x2 + ux * os * rnd() + jit(1), ey = y2 + uy * os * rnd() + jit(1);
+        var bow = jit(Math.min(5, L * 0.012));
+        var mx = (sx + ex) / 2 - uy * bow, my = (sy + ey) / 2 + ux * bow;
+        return (first ? "M" : "M") + f(sx) + "," + f(sy) + " Q" + f(mx) + "," + f(my) + " " + f(ex) + "," + f(ey);
+      }
+      // continuous polyline (no overshoot between joints so a camera can ride it)
+      function poly(pts) {
+        var d = "M" + pts[0][0] + "," + pts[0][1];
+        for (var i = 1; i < pts.length; i++) {
+          var a = pts[i - 1], b = pts[i], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+          var bow = jit(Math.min(4, L * 0.01));
+          d += " Q" + f((a[0] + b[0]) / 2 - dy / L * bow) + "," + f((a[1] + b[1]) / 2 + dx / L * bow) + " " + b[0] + "," + b[1];
+        }
+        return d;
+      }
+      function rectD(x, y, w, h) {
+        return seg(x, y, x + w, y) + " " + seg(x + w, y, x + w, y + h) + " " + seg(x + w, y + h, x, y + h) + " " + seg(x, y + h, x, y);
+      }
+      function el(tag, attrs, parent) {
+        var e = document.createElementNS(NS, tag);
+        for (var k in attrs) if (attrs[k] !== undefined) e.setAttribute(k, attrs[k]);
+        (parent || svg).appendChild(e); return e;
+      }
+      function g(id, parent) { return el("g", { id: id ? "bd-" + id : undefined }, parent); }
+      function path(d, color, w, parent, extra) {
+        var a = { d: d, stroke: color, "stroke-width": w, pathLength: "1" };
+        for (var k in extra || {}) a[k] = extra[k];
+        return el("path", a, parent);
+      }
+      function text(x, y, s, o, parent) {
+        o = o || {};
+        var t = el("text", { x: x, y: y, "text-anchor": o.anchor || "start", "dominant-baseline": "central",
+          "font-family": o.family || "'Noto Sans TC', sans-serif", "font-weight": o.weight || 400,
+          "font-size": o.size || 28, fill: o.fill || INK, id: o.id ? "bd-" + o.id : undefined }, parent);
+        t.textContent = s; return t;
+      }
+      // a sketched box: optional paper fill, marker outline, label + sub-label
+      function box(id, x, y, w, h, label, sub, o) {
+        o = o || {};
+        var grp = g(id);
+        el("rect", { x: x, y: y, width: w, height: h, fill: o.fill || PAPER, opacity: o.fillOpacity || 1, id: "bd-" + id + "-fill" }, grp);
+        var out = path(rectD(x, y, w, h), o.stroke || INK, o.sw || 2.6, grp, { id: "bd-" + id + "-line" });
+        var cy = sub ? y + h / 2 - 16 : y + h / 2;
+        var lt = text(x + w / 2, cy, label, { anchor: "middle", size: o.size || 30, weight: 500, id: id + "-t" }, grp);
+        var st = sub ? text(x + w / 2, y + h / 2 + 24, sub, { anchor: "middle", size: 18, family: "'JetBrains Mono', monospace", fill: GRAY, id: id + "-s" }, grp) : null;
+        return { g: grp, line: out, label: lt, sub: st };
+      }
+      function arrowHead(x, y, dir, color, w, parent) { // open "V" marker head pointing along dir (radians)
+        var L = 16, a1 = dir + Math.PI - 0.5, a2 = dir + Math.PI + 0.5;
+        return path("M" + f(x + Math.cos(a1) * L) + "," + f(y + Math.sin(a1) * L) + " L" + x + "," + y + " L" + f(x + Math.cos(a2) * L) + "," + f(y + Math.sin(a2) * L), color, w, parent);
+      }
+
+      // ================= WORLD CONTENT =================
+      // ---- hook notebook (x 2700–3300, y 1110–1760) ----
+      var hk = g("hook");
+      el("rect", { x: 2700, y: 1110, width: 600, height: 650, fill: PAPER }, hk);
+      path(rectD(2700, 1110, 600, 650), INK, 2.4, hk);
+      for (var i = 0; i < 9; i++) el("line", { x1: 2730, x2: 3270, y1: 1190 + i * 62, y2: 1190 + i * 62, stroke: "rgba(29,91,216,0.18)", "stroke-width": 1.5 }, hk);
+      el("line", { x1: 2780, x2: 2780, y1: 1110, y2: 1760, stroke: "rgba(217,54,62,0.35)", "stroke-width": 1.5 }, hk);
+      // scribbled lines with gaps
+      var scrib = [];
+      var rows = [[2800, 3240], [2800, 2990, 3120, 3250], [2800, 3180], [2800, 2900, 3060, 3240], [2800, 3100], [2800, 3000, 3150, 3250]];
+      rows.forEach(function (r, ri) {
+        for (var k = 0; k < r.length; k += 2) {
+          var y0 = 1172 + ri * 62, d = "M" + r[k] + "," + y0;
+          for (var x = r[k] + 14; x <= r[k + 1]; x += 14) d += " Q" + (x - 7) + "," + f(y0 - 9 + jit(3)) + " " + x + "," + f(y0 + jit(2));
+          scrib.push(path(d, INK, 2.2, hk, { class: "bd-scrib" }));
+        }
+      });
+      var gaps = [[3055, 1234], [2980, 1358], [3240, 1482]];
+      var qmarks = gaps.map(function (p, k) {
+        var q = g(null, hk);
+        path(rectD(p[0] - 34, p[1] - 30, 68, 58), RED, 2.6, q);
+        text(p[0], p[1], "?", { anchor: "middle", size: 40, family: "'Caveat', cursive", fill: RED }, q);
+        q.setAttribute("id", "bd-q" + k); return q;
+      });
+      var hkMiss = text(3000, 1700, "漏了…", { anchor: "middle", size: 44, family: "'Caveat', 'Noto Sans TC', cursive", fill: RED, id: "hk-miss" }, hk);
+
+      // ---- final_notes.md (x 2080–2560, y 1120–1760) ----
+      var dc = g("doc");
+      var docFrame = g("doc-frame", dc);
+      el("rect", { x: 2080, y: 1120, width: 480, height: 640, fill: PAPER }, docFrame);
+      var docOutline = path(rectD(2080, 1120, 480, 640), INK, 2.6, docFrame);
+      var docHead = g("doc-head", dc);
+      text(2110, 1170, "final_notes.md", { size: 24, family: "'JetBrains Mono', monospace", fill: INK }, docHead);
+      path(seg(2100, 1205, 2540, 1205, true), INK, 1.8, docHead);
+      var docRows = ["章節 1", "章節 2", "章節 3", "我的課堂筆記（原文）"].map(function (s, k) {
+        var r = g("doc-r" + k, dc), y0 = 1260 + k * 112;
+        text(2110, y0, "0" + (k + 1), { size: 22, family: "'JetBrains Mono', monospace", fill: GRAY }, r);
+        text(2160, y0, s, { size: 30, weight: 500 }, r);
+        var ln = [];
+        ln.push(path(seg(2112, y0 + 40, 2500 - k * 18, y0 + 40, true), "rgba(35,38,46,0.35)", 3, r));
+        ln.push(path(seg(2112, y0 + 66, 2420 - k * 30, y0 + 66, true), "rgba(35,38,46,0.35)", 3, r));
+        return { g: r, lines: ln };
+      });
+      var stamp = g("stamp", dc);
+      path(rectD(2420, 1132, 124, 60), RED, 3, stamp);
+      text(2482, 1162, "下課", { anchor: "middle", size: 32, weight: 500, fill: RED }, stamp);
+      stamp.setAttribute("transform", "rotate(-8 2482 1162)");
+      var check = path("M2470,1690 L2496,1716 L2546,1650", GREEN, 5, dc, { id: "bd-check" });
+      var docRing = path(rectD(2062, 1102, 516, 676), BLUE, 4, dc, { id: "bd-doc-ring" });
+
+      // ---- overview: the five boxes (STAGE §3 coordinates) ----
+      var mine = g("mine");
+      var mineLine = path(
+        "M580,300 H1160 V860 H580 Z", INK, 2.2, mine, { "stroke-dasharray": "14 11", id: "bd-mine-line" });
+      mineLine.removeAttribute("pathLength");
+      var mineT = text(600, 330, "你的電腦", { size: 24, fill: GRAY, id: "mine-t" }, mine);
+      var cloudT = text(1550, 200, "雲端", { anchor: "middle", size: 26, fill: GRAY, id: "cloud-t" });
+
+      var B = {
+        browser: box("browser", 120, 420, 320, 140, "瀏覽器／手機", "PWA · 16kHz PCM"),
+        server: box("server", 680, 400, 380, 180, "FastAPI 伺服器", "app.py · /ws"),
+        disk: box("disk", 720, 680, 300, 120, "磁碟", "lectures/YYYYMMDD/"),
+        live: box("live", 1340, 240, 420, 140, "Gemini Live", "即時語音辨識"),
+        flash: box("flash", 1340, 600, 420, 140, "Gemini Flash", "筆記 · 章節 · 整併 · 翻譯")
+      };
+      function conn(id, pts, color, w, label, lx, ly, parent) {
+        var grp = g(id, parent);
+        var p = path(poly(pts), color, w, grp, { id: "bd-" + id + "-p" });
+        var n = pts.length, a = pts[n - 2], b = pts[n - 1];
+        var h = arrowHead(b[0], b[1], Math.atan2(b[1] - a[1], b[0] - a[0]), color, w, grp);
+        h.setAttribute("id", "bd-" + id + "-h");
+        var t = label ? text(lx, ly, label, { anchor: "middle", size: color === INK ? 22 : 28, weight: color === INK ? 400 : 500, fill: color === INK ? GRAY : color, id: id + "-t" }, grp) : null;
+        return { g: grp, p: p, h: h, t: t, pts: pts };
+      }
+      var C = {
+        bs: conn("c-bs", [[446, 490], [674, 490]], INK, 2.4, "/ws 音訊", 560, 466),
+        sl: conn("c-sl", [[1066, 450], [1200, 450], [1200, 310], [1334, 310]], INK, 2.4, "音訊 → 逐字稿", 1268, 286),
+        sf: conn("c-sf", [[1066, 530], [1200, 530], [1200, 670], [1334, 670]], INK, 2.4, "prompt → 筆記", 1268, 646),
+        sd: conn("c-sd", [[870, 586], [870, 674]], INK, 2.4, null)
+      };
+
+      // ---- layer 1: blue flow overlays + the notes strip below ----
+      var L1 = {
+        bs: conn("l1-bs", [[446, 506], [674, 506]], BLUE, 4, null),
+        sl: conn("l1-sl", [[1066, 434], [1216, 434], [1216, 294], [1334, 294]], BLUE, 4, null),
+        ls: conn("l1-ls", [[1334, 354], [1232, 354], [1232, 470], [1066, 470]], BLUE, 4, "逐字稿", 1160, 398),
+        sf: conn("l1-sf", [[1066, 546], [1216, 546], [1216, 690], [1334, 690]], BLUE, 4, null),
+        fz: conn("l1-fz", [[1550, 746], [1550, 1250], [686, 1250], [686, 1330]], BLUE, 4, "每 60 秒 → 一段筆記", 1118, 1218),
+        mg: conn("l1-mg", [[1172, 1560], [1172, 1640], [2010, 1640], [2010, 1440], [2074, 1440]], BLUE, 4, "下課 · 整併", 1590, 1608)
+      };
+      var notes = [];
+      for (i = 0; i < 10; i++) {
+        var nx = 640 + i * 108, ng = g("note" + i);
+        el("rect", { x: nx, y: 1340, width: 92, height: 72, fill: YELLOW }, ng);
+        path(seg(nx + 12, 1362, nx + 78, 1362, true), "rgba(35,38,46,0.45)", 2.4, ng);
+        path(seg(nx + 12, 1380, nx + 70, 1380, true), "rgba(35,38,46,0.45)", 2.4, ng);
+        path(seg(nx + 12, 1398, nx + 56, 1398, true), "rgba(35,38,46,0.45)", 2.4, ng);
+        notes.push(ng);
+      }
+      var brace = path("M640,1430 Q640,1460 700,1460 L1110,1460 Q1172,1460 1172,1494 Q1172,1460 1234,1460 L1644,1460 Q1704,1460 1704,1430", BLUE, 3.2, null, { id: "bd-brace" });
+      var ch1 = text(1172, 1530, "第 1 章", { anchor: "middle", size: 34, weight: 500, fill: BLUE, id: "ch1" });
+      var tenT = text(1172, 1312, "× 10", { anchor: "middle", size: 40, family: "'Caveat', cursive", fill: BLUE, id: "ten" });
+      var ghosts = [0, 1].map(function (k) {
+        var gg = g("ghost" + k), gx = 1770, gy = 1330 + k * 110;
+        el("rect", { x: gx, y: gy, width: 200, height: 86, fill: PAPER }, gg);
+        path(rectD(gx, gy, 200, 86), GRAY, 2.2, gg, { "stroke-dasharray": "0.03 0.02" });
+        text(gx + 100, gy + 43, "第 " + (k + 2) + " 章", { anchor: "middle", size: 28, fill: GRAY }, gg);
+        return gg;
+      });
+      var pcm = text(560, 540, "16 kHz PCM", { anchor: "middle", size: 34, family: "'Caveat', cursive", fill: BLUE, id: "pcm" });
+
+      // ================= LAYERS 2–7 · world content =================
+      function makeSticky(id, x, y, w, rot, tag, txt, src, blue) {
+        var d = document.createElement("div");
+        d.className = "bd-sticky" + (blue ? " bd-blue" : ""); d.id = "bd-" + id;
+        d.style.cssText = "left:" + x + "px;top:" + y + "px;width:" + w + "px;transform:rotate(" + rot + "deg);";
+        d.innerHTML = '<div class="bd-tag">' + tag + '</div><div class="bd-txt">' + txt + '</div>' + (src ? '<div class="bd-src">' + src + '</div>' : "");
+        world.appendChild(d); return d;
+      }
+      function cross(x1, y1, x2, y2, color, w, parent) { return [path(seg(x1, y1, x2, y2, true), color, w || 4.5, parent), path(seg(x2, y1, x1, y2, true), color, w || 4.5, parent)]; }
+      function dot(x, y, r, color, parent) { return el("circle", { cx: x, cy: y, r: r, fill: color }, parent); }
+      var MONO = "'JetBrains Mono', monospace", HAND = "'Caveat', cursive";
+
+      // ---- Z2 連線 (x 2020–3800, y 60–760) ----
+      var S2need = makeSticky("l2-need", 2040, 70, 440, -1.5, "需求", "連線有時間上限，課卻有兩小時");
+      var S2design = makeSticky("l2-design", 3400, 420, 420, 1.5, "設計", "每 570 秒主動換一條新連線；聲音先落地，再送辨識", "SESSION_ROTATE_SECONDS = 570<br>ADR 0003", true);
+      var l2out = conn("l2-out", [[1766, 310], [1900, 310], [1900, 382], [2290, 382]], BLUE, 4, null);
+      var ax2 = g("ax2");
+      var ax2line = path(seg(2300, 300, 3300, 300, true), INK, 2.4, ax2);
+      var ax2ticks = [0, 30, 60, 90, 120].map(function (m, k) {
+        var x = 2300 + k * 250, tg = g(null, ax2);
+        path(seg(x, 288, x, 312, true), INK, 2.2, tg);
+        text(x, 262, "" + m, { anchor: "middle", size: 34, family: HAND }, tg); return tg;
+      });
+      var ax2unit = text(3345, 262, "分鐘", { size: 26, fill: GRAY }, ax2);
+      var top2 = g("top2");
+      text(2060, 382, "Gemini Live 連線", { size: 28, weight: 500 }, top2);
+      path(rectD(2300, 360, 1000, 44), GRAY, 1.8, top2);
+      var segs2 = [];
+      for (i = 0; i < 13; i++) segs2.push(el("rect", { x: f(2302 + i * 79.17), y: 362, width: i < 12 ? 75 : 46, height: 40, fill: BLUE, opacity: 0.85 }));
+      var lim2 = g("lim2");
+      path(seg(2379, 344, 2379, 420, true), RED, 3.4, lim2);
+      text(2379, 330, "上限", { anchor: "middle", size: 26, weight: 500, fill: RED }, lim2);
+      var lec2 = g("lec2");
+      var lec2line = path(seg(2300, 452, 3300, 452, true), GRAY, 2.4, lec2, { "stroke-dasharray": "0.012 0.008" });
+      text(2060, 452, "一堂課 2 小時", { size: 26, fill: GRAY }, lec2);
+      var bot2 = g("bot2");
+      text(2060, 522, "lecture.wav", { size: 26, family: MONO }, bot2);
+      path(rectD(2300, 500, 1000, 44), GRAY, 1.8, bot2);
+      var wav2 = el("rect", { x: 2302, y: 502, width: 996, height: 40, fill: INK, opacity: 0.8, id: "bd-wav2" });
+      var fl2 = [box("f2-mic", 2300, 640, 200, 80, "麥克風", null, { size: 26 }), box("f2-wav", 2560, 640, 200, 80, "lecture.wav", null, { size: 24 }),
+                 box("f2-q", 2820, 640, 200, 80, "audio_queue", null, { size: 24 }), box("f2-live", 3080, 640, 200, 80, "Gemini Live", null, { size: 24 })];
+      var fa2 = [conn("f2-a1", [[2506, 680], [2554, 680]], INK, 2.4, null), conn("f2-a2", [[2766, 680], [2814, 680]], INK, 2.4, null), conn("f2-a3", [[3026, 680], [3074, 680]], INK, 2.4, null)];
+      var x2 = cross(3070, 630, 3290, 730, RED);
+      var ok2 = g("ok2");
+      var ok2ring = path(rectD(2548, 628, 224, 104), GREEN, 3.6, ok2);
+      var ok2t = text(2660, 600, "錄音完整", { anchor: "middle", size: 28, weight: 500, fill: GREEN }, ok2);
+
+      // ---- Z3 失敗之後 (x 3900–5300, y 60–800) ----
+      var S3need = makeSticky("l3-need", 3900, 60, 460, -1.2, "需求", "網路一定會壞，但每種失敗的代價不一樣");
+      var S3design = makeSticky("l3-design", 4820, 60, 440, 1.5, "設計", "依失敗的代價，分三層重試", "LIVE / FINAL / BACKGROUND<br>_RETRY_DELAYS", true);
+      function LX(sec) { return 4250 + 225 * Math.log10(sec); }
+      var ax3 = g("ax3");
+      text(3900, 300, "等待時間（log 尺度）", { size: 24, fill: GRAY }, ax3);
+      path(seg(4250, 300, 5000, 300, true), INK, 2.4, ax3);
+      ["1s", "10s", "100s", "1000s"].forEach(function (lb, k) { var x = 4250 + 225 * k; path(seg(x, 290, x, 310, true), INK, 2, ax3); text(x, 270, lb, { anchor: "middle", size: 30, family: HAND, fill: GRAY }, ax3); });
+      function lane(id, y, name, konst) { var lg = g(id); text(3900, y - 16, name, { size: 30, weight: 500 }, lg); text(3900, y + 22, konst, { size: 17, family: MONO, fill: GRAY }, lg); path(seg(4250, y, 5000, y, true), "rgba(35,38,46,0.15)", 2, lg); return lg; }
+      var lnA = lane("l3a", 420, "逐段筆記", "LIVE_RETRY_DELAYS"), lnB = lane("l3b", 580, "最終整併", "FINAL_RETRY_DELAYS"), lnC = lane("l3c", 740, "背景再試", "BACKGROUND_RETRY_DELAYS");
+      function marks(list, y, color, labels) { return list.map(function (sec, k) { var mg = g(null); dot(LX(sec), y, 11, color, mg); text(LX(sec), y - 34, labels[k], { anchor: "middle", size: labels[k].length > 3 ? 24 : 30, family: labels[k].match(/[分]/) ? "'Noto Sans TC'" : HAND, fill: color }, mg); return mg; }); }
+      var mA = marks([2, 4, 8], 420, BLUE, ["2s", "4s", "8s"]);
+      var giveUp = text(4520, 420, "→ 放棄", { size: 28, fill: GRAY, id: "giveup" });
+      var barB = el("rect", { x: 4250, y: 570, width: f(LX(120) - 4250), height: 20, fill: BLUE, opacity: 0.22, id: "bd-barB" });
+      var mB = marks([5, 15, 45, 120], 580, BLUE, ["5s", "15s", "45s", "120s"]);
+      var t120 = text(LX(120) + 40, 580, "最貴，等到 120 秒", { size: 28, weight: 500, fill: BLUE, id: "t120" });
+      var mC = marks([60, 300, 900], 740, BLUE, ["1 分", "5 分", "15 分"]);
+      var bgNote = text(3900, 800, "瀏覽器關了也繼續試", { size: 22, fill: GRAY, id: "bgnote" });
+
+      // ---- Z4 最終筆記 (x 3900–5300, y 1000–1850) ----
+      var S4need = makeSticky("l4-need", 3900, 1000, 470, -1.5, "需求", "整併失敗，素材不能跟著消失");
+      var S4design = makeSticky("l4-design", 4320, 1600, 480, 1.2, "設計", "兩條路都要拿同一把鎖，才能寫最終筆記", "session_lock() · publish_final_notes()", true);
+      var js4 = g("js4");
+      var js4line = path("M3920,1230 L4110,1230 L4150,1270 L4150,1380 L3920,1380 Z M4110,1230 L4110,1270 L4150,1270", INK, 2.6, js4);
+      text(4035, 1305, "finalize_input.json", { anchor: "middle", size: 17, family: MONO }, js4);
+      var js4t = text(4035, 1420, "整併前就寫好 · ADR 0002", { anchor: "middle", size: 22, fill: GRAY, id: "js4t" });
+      var redo4 = g("redo4");
+      var redo4p = path("M4060,1450 Q4035,1500 3985,1480 Q3940,1455 3965,1415", BLUE, 3.4, redo4);
+      var redo4t = text(3990, 1525, "隨時再跑", { anchor: "middle", size: 26, weight: 500, fill: BLUE }, redo4);
+      var p4a = box("p4a", 4300, 1180, 420, 80, "① WebSocket 下課收尾", null, { size: 24 });
+      var p4b = box("p4b", 4300, 1330, 420, 80, "② POST /finalize（手動・背景）", null, { size: 24 });
+      var lock4 = g("lock4");
+      el("rect", { x: 4800, y: 1290, width: 90, height: 72, fill: PAPER }, lock4);
+      var lock4line = path(rectD(4800, 1290, 90, 72) + " M4818,1290 V1262 A27,27 0 0 1 4872,1262 V1290", INK, 3, lock4);
+      dot(4845, 1322, 7, INK, lock4);
+      text(4845, 1395, "session_lock", { anchor: "middle", size: 19, family: MONO }, lock4);
+      var c4a = conn("c4a", [[4726, 1220], [4760, 1220], [4760, 1310], [4794, 1310]], INK, 2.4, null);
+      var c4b = conn("c4b", [[4726, 1370], [4760, 1370], [4760, 1342], [4794, 1342]], INK, 2.4, null);
+      var c4p = conn("c4p", [[4896, 1326], [4980, 1326]], BLUE, 3.4, "publish", 4938, 1300);
+      var fn4 = box("fn4", 4986, 1270, 300, 110, "final_notes.md", "status: ok", { size: 24, stroke: BLUE });
+      var late4 = conn("late4", [[4510, 1416], [4510, 1480], [4845, 1480], [4845, 1430]], RED, 3.2, "晚到的失敗", 4660, 1508);
+      var x4 = cross(4815, 1420, 4875, 1470, RED, 4);
+      var late4t = text(5000, 1455, "蓋不掉成功的筆記", { size: 26, weight: 500, fill: RED, id: "late4t" });
+
+      // ---- Z5 人的修正 (x 3500–5500, y 1880–2800) ----
+      var S5need = makeSticky("l5-need", 3500, 1890, 470, -1.5, "需求", "模型寫錯一段，錯誤會一路傳到最後");
+      var S5design = makeSticky("l5-design", 5060, 1880, 440, 1.5, "設計", "更正是指示，手寫筆記是素材", "corrections_block() · ADR 0005", true);
+      var ch5 = [box("c5a", 3680, 2080, 300, 100, "段落筆記", null, { size: 28 }), box("c5b", 4180, 2080, 300, 100, "章節摘要", null, { size: 28 }), box("c5c", 4680, 2080, 300, 100, "最終筆記", null, { size: 28 })];
+      var ca5 = [conn("c5ab", [[3986, 2130], [4174, 2130]], INK, 2.4, null), conn("c5bc", [[4486, 2130], [4674, 2130]], INK, 2.4, null)];
+      var err5 = [3960, 4460, 4960].map(function (x, k) { var eg = g("err5-" + k); dot(x, 2080, 24, RED, eg); text(x, 2080, "錯", { anchor: "middle", size: 24, weight: 500, fill: PAPER }, eg); return eg; });
+      var pr5 = ["lecture_note_prompt", "rollup_prompt", "final_prompt"].map(function (s, k) { return text(3830 + k * 500, 2230, s, { anchor: "middle", size: 19, family: MONO, fill: GRAY, id: "pr5-" + k }); });
+      var fix5 = box("fix5", 3680, 2420, 300, 90, "更正", null, { size: 30, stroke: BLUE });
+      var fix5tag = text(3955, 2440, "指示", { anchor: "end", size: 20, weight: 500, fill: BLUE, id: "fix5tag" });
+      var bus5 = conn("bus5", [[3830, 2414], [3830, 2330], [4830, 2330]], BLUE, 3.4, null);
+      bus5.h.setAttribute("opacity", 0);
+      var up5 = [3830, 4330, 4830].map(function (x, k) { return conn("up5-" + k, [[x, 2330], [x, 2256]], BLUE, 3.4, null); });
+      var win5 = text(4330, 2395, "衝突時，以更正為準", { anchor: "middle", size: 30, weight: 500, fill: BLUE, id: "win5" });
+      var own5 = box("own5", 4730, 2560, 300, 90, "手寫筆記", null, { size: 30 });
+      var own5tag = text(5005, 2580, "素材", { anchor: "end", size: 20, weight: 500, fill: GRAY, id: "own5tag" });
+      var own5a = conn("own5a", [[5040, 2605], [5100, 2605], [5100, 2150], [4986, 2150]], INK, 2.6, null);
+      var own5t = g("own5t");
+      text(5120, 2380, "原文附加，不經模型", { size: 26, weight: 500 }, own5t);
+      text(5120, 2420, "## 我的課堂筆記（原文）", { size: 18, family: MONO, fill: GRAY }, own5t);
+
+      // ---- Z6 翻譯 (x 1550–2950, y 1880–2800) ----
+      var S6need = makeSticky("l6-need", 2660, 1880, 420, -1.5, "需求", "組員裡，有人不讀中文");
+      var S6design = makeSticky("l6-design", 2140, 2580, 470, 1.2, "設計", "翻譯是整併成功之後，獨立的一步", "write_translations() · ADR 0006", true);
+      var doc6 = g("doc6");
+      el("rect", { x: 1620, y: 2100, width: 330, height: 400, fill: PAPER }, doc6);
+      var doc6line = path(rectD(1620, 2100, 330, 400), INK, 2.6, doc6);
+      text(1645, 2140, "final_notes.md", { size: 18, family: MONO, fill: GRAY }, doc6);
+      text(1785, 2240, "繁中正本", { anchor: "middle", size: 32, weight: 500 }, doc6);
+      [2300, 2340, 2380, 2420].forEach(function (y, k) { path(seg(1650, y, 1920 - k * 22, y, true), "rgba(35,38,46,0.35)", 3, doc6); });
+      var sep6 = g("sep6");
+      path(seg(2060, 2070, 2060, 2530, true), GRAY, 2.4, sep6, { "stroke-dasharray": "0.025 0.02" });
+      text(2060, 2045, "整併成功之後", { anchor: "middle", size: 24, fill: GRAY }, sep6);
+      var langs = [["EN", "English"], ["DE", "German"], ["PL", "Polish"], ["ES", "Spanish"]];
+      var br6 = [], cards6 = [], btn6 = [];
+      langs.forEach(function (lg, k) {
+        var y = 2040 + k * 120, yc = y + 45;
+        br6.push(conn("br6-" + k, [[1956, 2300], [2120, 2300], [2120, yc], [2194, yc]], INK, 2.4, null));
+        var cg = g("card6-" + k);
+        el("rect", { x: 2200, y: y, width: 420, height: 90, fill: PAPER }, cg);
+        path(rectD(2200, y, 420, 90), INK, 2.4, cg);
+        text(2225, yc, lg[0], { size: 26, family: MONO, weight: 500, fill: BLUE }, cg);
+        text(2290, yc, lg[1], { size: 28 }, cg);
+        var bg = g("btn6-" + k, cg);
+        path(rectD(2520, y + 22, 82, 46), INK, 2, bg);
+        text(2561, yc, "下載", { anchor: "middle", size: 20 }, bg);
+        cards6.push(cg); btn6.push(bg);
+      });
+      var four6 = text(2410, 2530, "4 種語言", { anchor: "middle", size: 32, weight: 500, fill: BLUE, id: "four6" });
+      var xPL = cross(2196, 2276, 2624, 2374, RED, 4.5);
+      var tPL = text(2650, 2325, "只少一份", { size: 28, weight: 500, fill: RED, id: "tpl" });
+      var tDE = text(2650, 2190, "比正本舊", { size: 28, weight: 500, fill: RED, id: "tde" });
+      var xDE = cross(2516, 2178, 2606, 2232, RED, 4);
+      var tDE2 = text(2650, 2228, "不能下載 · is_current()", { size: 20, fill: RED, id: "tde2" });
+
+      // ---- Z7 手機 (x -1720 – -200, y 100–1150) ----
+      var S7need = makeSticky("l7-need", -660, 170, 440, -1.5, "需求", "上課最順手的是手機");
+      var S7design = makeSticky("l7-design", -1720, 930, 470, 1.2, "設計", "手機經 Tailscale Serve 連回自己的 Mac", "ADR 0007 · 前端是 PWA", true);
+      var l7in = conn("l7-in", [[114, 490], [-40, 490], [-40, 580], [-1240, 580]], BLUE, 4, null);
+      var ph7 = g("ph7");
+      el("rect", { x: -1560, y: 280, width: 300, height: 560, fill: PAPER }, ph7);
+      var ph7line = path(rectD(-1560, 280, 300, 560) + " " + seg(-1450, 310, -1370, 310, true), INK, 3, ph7);
+      var mic7 = g("mic7");
+      var mic7p = path("M-1430,430 L-1430,470 Q-1430,500 -1410,500 Q-1390,500 -1390,470 L-1390,430 Q-1390,405 -1410,405 Q-1430,405 -1430,430 M-1445,465 Q-1445,520 -1410,520 Q-1375,520 -1375,465 M-1410,520 L-1410,545", INK, 3, mic7);
+      var https7 = text(-1410, 230, "麥克風只在 HTTPS 底下才能開", { anchor: "middle", size: 28, weight: 500, id: "https7" });
+      var pwa7 = g("pwa7");
+      el("rect", { x: -1460, y: 640, width: 100, height: 100, fill: BLUE }, pwa7);
+      text(-1410, 690, "PWA", { anchor: "middle", size: 28, weight: 500, fill: PAPER }, pwa7);
+      var tun7 = [path(seg(-1250, 545, -710, 545, true), BLUE, 3.4, null, { "stroke-dasharray": "0.02 0.012" }), path(seg(-1250, 615, -710, 615, true), BLUE, 3.4, null, { "stroke-dasharray": "0.02 0.012" })];
+      var tun7t = text(-980, 505, "Tailscale Serve", { anchor: "middle", size: 32, weight: 500, fill: BLUE, id: "tun7t" });
+      var tun7s = text(-980, 655, "*.ts.net · HTTPS", { anchor: "middle", size: 20, family: MONO, fill: BLUE, id: "tun7s" });
+      var mac7 = box("mac7", -700, 500, 420, 160, "你的 Mac", "127.0.0.1:8000", { size: 32 });
+      var cl7 = g("cl7");
+      var cl7line = path("M-1060,960 Q-1115,958 -1102,910 Q-1092,866 -1040,876 Q-1020,822 -956,834 Q-898,806 -862,858 Q-800,850 -800,904 Q-786,960 -842,960 Z", GRAY, 2.6, cl7);
+      text(-950, 912, "雲端", { anchor: "middle", size: 28, fill: GRAY }, cl7);
+      var up7 = conn("up7", [[-490, 666], [-490, 900], [-794, 900]], GRAY, 2.4, "金鑰 · 課堂內容", -640, 875);
+      var x7 = cross(-1110, 830, -790, 975, RED, 5);
+      var no7 = text(-950, 1010, "都不上雲", { anchor: "middle", size: 32, weight: 500, fill: RED, id: "no7" });
+
+      // ---- close: zone tags + five-box rings ----
+      var TAGS = [[600, 1130, "01 資料流"], [2040, -40, "02 連線"], [3900, -60, "03 失敗之後"], [3900, 950, "04 最終筆記"], [3500, 1820, "05 人的修正"], [1560, 1820, "06 翻譯"], [-1720, 60, "07 手機"]];
+      var tags = TAGS.map(function (tg, k) {
+        var t = text(tg[0], tg[1], tg[2], { size: 120, weight: 500, fill: BLUE, id: "tag" + k });
+        t.setAttribute("stroke", "#F7F6F2"); t.setAttribute("stroke-width", 18); t.setAttribute("paint-order", "stroke"); return t;
+      });
+      var rings = [[120, 420, 320, 140], [680, 400, 380, 180], [720, 680, 300, 120], [1340, 240, 420, 140], [1340, 600, 420, 140]].map(function (r) { return path(rectD(r[0] - 18, r[1] - 18, r[2] + 36, r[3] + 36), BLUE, 6); });
+
+      // ---- HUD items ----
+      var hudEl = $("hud");
+      var HUDS = ["資料流", "連線", "失敗之後", "最終筆記", "人的修正", "翻譯", "手機"].map(function (t, k) {
+        var d = document.createElement("div"); d.className = "bd-hud-item"; d.id = "bd-hud" + (k + 1);
+        d.innerHTML = '<div class="bd-hud-k">Layer 0' + (k + 1) + ' / 07</div><div class="bd-hud-t">' + t + '</div><svg viewBox="0 0 210 16"><path pathLength="1" d="M2,9 Q100,3 206,8" stroke="#1D5BD8" stroke-width="4" fill="none" stroke-linecap="round"/></svg>';
+        hudEl.appendChild(d); return d;
+      });
+
+      // ================= TIMELINE =================
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+      var E = "power3.out";
+      // pathLength=1 paths: dash values live in 0–1, so CSS px autoRound must be off or the stroke snaps 0→1
+      function draw(p, t, d, ease, dashAfter) {
+        tl.fromTo(p, { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: d, ease: ease || "power2.inOut", autoRound: false }, t);
+        if (dashAfter) tl.set(p, { strokeDasharray: dashAfter }, t + d);
+      }
+      function drawAll(list, t, d, gap) { list.forEach(function (p, k) { draw(p, t + k * (gap || 0), d); }); }
+      function show(e, t, d, from) { tl.fromTo(e, from || { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: d || 0.5, ease: E }, t); }
+      function pop(e, t, d) { tl.fromTo(e, { opacity: 0, scale: 0.6, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: d || 0.45, ease: "back.out(1.6)" }, t); }
+      function write(e, t, d) { tl.fromTo(e, { clipPath: "inset(-20% 100% -20% 0%)" }, { clipPath: "inset(-20% 0% -20% 0%)", duration: d || 0.8, ease: "power1.inOut" }, t); }
+      function sticky(e, t) { tl.fromTo(e, { opacity: 0, y: -24, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: "power3.out" }, t); }
+      function drawBox(b, t) { draw(b.line, t, 0.55); tl.fromTo(b.g.querySelector("rect"), { opacity: 0 }, { opacity: 1, duration: 0.3 }, t + 0.25); show(b.label, t + 0.3, 0.4); if (b.sub) show(b.sub, t + 0.4, 0.4); }
+      function drawConn(c, t, d) { draw(c.p, t, d || 0.5); draw(c.h, t + (d || 0.5) - 0.05, 0.15, "none"); if (c.t) show(c.t, t + (d || 0.5) * 0.6, 0.4); }
+
+      // ---------- camera: pose is a pure function of time (seek-safe) ----------
+      var shots = []; // {t0,t1,type,from,to,ease,arc,path,s0,s1}
+      var pose = { x: 3000, y: 1420, s: 1.3 };
+      function move(t0, t1, to, ease, arc) {
+        shots.push({ t0: t0, t1: t1, type: "move", from: { x: pose.x, y: pose.y, s: pose.s }, to: to, ease: gsap.parseEase(ease || "sine.inOut"), arc: arc || 0 });
+        pose = { x: to.x, y: to.y, s: to.s };
+      }
+      // ride a connector: the line draws and the camera keeps its pen tip at screen centre
+      function follow(t0, t1, c, s0, s1, ease) {
+        var len = c.p.getTotalLength(), ez = ease || "sine.inOut";
+        var st = c.p.getPointAtLength(0);
+        if (Math.hypot(st.x - pose.x, st.y - pose.y) > 2 || Math.abs(pose.s - s0) > 0.001) {
+          var last = shots[shots.length - 1];
+          if (last && last.type === "move" && last.t1 > t0 - 1.0) { last.to = { x: st.x, y: st.y, s: s0 }; last.t1 = Math.min(last.t1, t0); }  // retarget, never overlap
+          else move(Math.max(last ? last.t1 : 0, t0 - 1.0), t0, { x: st.x, y: st.y, s: s0 }, "sine.inOut");
+        }
+        shots.push({ t0: t0, t1: t1, type: "follow", path: c.p, len: len, s0: s0, s1: s1, ease: gsap.parseEase(ez) });
+        draw(c.p, t0, t1 - t0, ez);
+        draw(c.h, t1 - 0.05, 0.15, "none");
+        if (c.t) show(c.t, t0 + (t1 - t0) * 0.5, 0.4);
+        var en = c.p.getPointAtLength(len);
+        pose = { x: en.x, y: en.y, s: s1 };
+      }
+      function camAt(t) {
+        var cur = shots.length ? shots[0].from || { x: pose.x, y: pose.y, s: pose.s } : pose;
+        for (var k = 0; k < shots.length; k++) {
+          var sh = shots[k];
+          if (t < sh.t0) break;
+          var p = Math.min(1, (t - sh.t0) / (sh.t1 - sh.t0)), e = sh.ease(p);
+          if (sh.type === "move") {
+            var s = sh.from.s + (sh.to.s - sh.from.s) * e;
+            s *= 1 - sh.arc * Math.sin(Math.PI * e);
+            cur = { x: sh.from.x + (sh.to.x - sh.from.x) * e, y: sh.from.y + (sh.to.y - sh.from.y) * e, s: s };
+          } else {
+            var pt = sh.path.getPointAtLength(sh.len * e);
+            cur = { x: pt.x, y: pt.y, s: sh.s0 + (sh.s1 - sh.s0) * e };
+          }
+        }
+        return cur;
+      }
+      function applyCam(t) {
+        var c = camAt(t);
+        world.style.transform = "translate(" + f(960 - c.x * c.s) + "px," + f(540 - c.y * c.s) + "px) scale(" + c.s.toFixed(4) + ")";
+      }
+
+      // ----- Frame 1 · hook (0–10) -----
+      var hookStart = { x: 3000, y: 1420, s: 1.3 };
+      pose = hookStart;
+      move(0, 3.8, { x: 3010, y: 1430, s: 1.36 }, "sine.inOut");
+      write($("hook-title"), 0.6, 1.0);
+      drawAll(scrib, 2.2, 0.32, 0.12);
+      qmarks.forEach(function (q, k) { pop(q, 3.3 + k * 0.18); });
+      show(hkMiss, 3.8, 0.4);
+      move(3.9, 6.0, { x: 2330, y: 1390, s: 1.25 });
+      tl.to(hk, { opacity: 0.3, duration: 0.8, ease: "power1.out" }, 4.3);
+      write($("hook-head"), 4.7, 0.8);
+      tl.fromTo(docFrame.querySelector("rect"), { opacity: 0 }, { opacity: 1, duration: 0.5 }, 4.7);
+      draw(docOutline, 4.5, 0.8);
+      pop(stamp, 5.6, 0.5);
+      tl.fromTo(docHead, { opacity: 0 }, { opacity: 1, duration: 0.4 }, 6.2);
+      docRows.forEach(function (r, k) {
+        var t = 6.6 + k * 0.42;
+        show(r.g.querySelectorAll("text"), t, 0.35);
+        drawAll(r.lines, t + 0.1, 0.3, 0.12);
+      });
+      draw(check, 8.4, 0.45, "power2.out");
+      move(6.0, 8.6, { x: 2320, y: 1380, s: 1.3 });
+
+      // ----- Frame 2 · overview (10–20.75) -----
+      move(8.6, 13.0, { x: 960, y: 560, s: 1.0 }, "sine.inOut", 0.3);
+      write($("ov-title"), 11.0, 0.9);
+      tl.fromTo(mineLine, { opacity: 0 }, { opacity: 1, duration: 0.7, ease: "power1.out" }, 11.5);
+      show(mineT, 12.1, 0.4);
+      drawBox(B.server, 11.9);
+      drawBox(B.browser, 13.9);
+      drawBox(B.disk, 14.1);
+      drawBox(B.live, 14.3);
+      drawBox(B.flash, 14.5);
+      show(cloudT, 14.4, 0.4);
+      show($("ov-five"), 14.6, 0.5, { opacity: 0, x: -16 });
+      drawConn(C.bs, 14.8, 0.4);
+      drawConn(C.sl, 15.0, 0.5);
+      drawConn(C.sf, 15.2, 0.5);
+      drawConn(C.sd, 15.4, 0.3);
+      write($("ov-tag"), 15.2, 1.6);
+      draw($("ul-need").querySelector("path"), 17.1, 0.45, "power2.out");
+      draw($("ul-fail").querySelector("path"), 18.6, 0.45, "power2.out");
+      move(13.0, 20.6, { x: 960, y: 560, s: 1.035 });
+
+      function hudIn(k, t) { var h = HUDS[k - 1]; tl.fromTo(h, { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, t); draw(h.querySelector("path"), t + 0.3, 0.5, "power2.out"); }
+      function hudOut(k, t) { tl.to(HUDS[k - 1], { opacity: 0, x: -12, duration: 0.35, ease: "power1.in" }, t); }
+
+      // ----- Frame 3 · layer 01 data flow (20.75–35.61) -----
+      var F3 = 20.75;
+      hudIn(1, F3);
+      move(F3 + 0.1, F3 + 2.2, { x: 470, y: 560, s: 1.4 });
+      sticky($("l1-need"), F3 + 1.6);
+      write($("l1-need").querySelector(".bd-txt"), F3 + 1.85, 0.9);
+      follow(F3 + 4.3, F3 + 5.7, L1.bs, 1.55, 1.45);          // 聲音以 16 kHz 串流進來
+      show(pcm, F3 + 4.7, 0.4);
+      move(F3 + 5.7, F3 + 7.3, { x: 1200, y: 440, s: 1.12 }, "sine.inOut", 0.06);
+      drawConn(L1.sl, F3 + 6.4, 0.6);                        // 即時變成逐字稿
+      drawConn(L1.ls, F3 + 7.0, 0.55);
+      follow(F3 + 7.5, F3 + 8.4, L1.sf, 1.05, 0.95);   // 每 60 秒，寫成一段筆記
+      follow(F3 + 8.9, F3 + 11.3, L1.fz, 0.85, 0.65);
+      notes.forEach(function (n, k) { pop(n, F3 + 10.2 + k * 0.09, 0.35); });
+      move(F3 + 11.3, F3 + 12.3, { x: 1130, y: 1470, s: 0.75 });
+      draw(brace, F3 + 10.9, 0.6, "power2.out");             // 每十段，再壓成一個章節
+      show(tenT, F3 + 10.7, 0.4);
+      show(ch1, F3 + 11.4, 0.4);
+      ghosts.forEach(function (gh, k) { pop(gh, F3 + 11.6 + k * 0.15, 0.4); });
+      sticky($("l1-design"), F3 + 11.2);
+      follow(F3 + 12.3, F3 + 14.7, L1.mg, 0.75, 0.85);       // 下課時，只要整併這些章節
+      draw(docRing, F3 + 13.5, 0.7, "power2.out");
+
+      // ----- Frame 4 · layer 02 rotation (35.61–51.56) -----
+      var F4 = 35.61;
+      hudOut(1, F4); hudIn(2, F4 + 0.3);
+      move(F4 - 0.2, F4 + 2.6, { x: 1766, y: 310, s: 1.0 }, "sine.inOut", 0.22);
+      follow(F4 + 2.6, F4 + 4.3, l2out, 1.0, 0.95);
+      sticky(S2need, F4 + 2.2);
+      draw(ax2line, F4 + 2.8, 0.8); ax2ticks.forEach(function (t, k) { show(t, F4 + 3.0 + k * 0.08, 0.35); }); show(ax2unit, F4 + 3.4, 0.3);
+      show(top2, F4 + 3.0, 0.4);
+      move(F4 + 4.3, F4 + 5.9, { x: 2800, y: 420, s: 0.95 });
+      tl.fromTo(segs2[0], { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.8, ease: "power2.out" }, F4 + 3.6);
+      show(lim2, F4 + 4.2, 0.4);
+      show(lec2, F4 + 4.9, 0.4); draw(lec2line, F4 + 4.9, 0.9, null, "0.012 0.008");
+      segs2.slice(1).forEach(function (r, k) { tl.fromTo(r, { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.35, ease: "power2.out" }, F4 + 6.3 + k * 0.13); });
+      tl.to(lim2, { opacity: 0.35, duration: 0.5 }, F4 + 6.3);
+      sticky(S2design, F4 + 6.6);
+      show(bot2, F4 + 8.5, 0.4);
+      tl.fromTo(wav2, { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.9, ease: "power2.out" }, F4 + 8.7);
+      move(F4 + 9.4, F4 + 11.0, { x: 2800, y: 600, s: 1.12 });
+      drawBox(fl2[0], F4 + 9.8); drawConn(fa2[0], F4 + 10.2, 0.3); drawBox(fl2[1], F4 + 10.3);
+      drawConn(fa2[1], F4 + 11.4, 0.3); drawBox(fl2[2], F4 + 11.5); drawConn(fa2[2], F4 + 11.8, 0.3); drawBox(fl2[3], F4 + 11.9);
+      drawAll(x2, F4 + 12.7, 0.3, 0.15);
+      draw(ok2ring, F4 + 13.8, 0.6, "power2.out"); show(ok2t, F4 + 14.1, 0.4);
+
+      // ----- Frame 5 · layer 03 retries (51.56–67.84) -----
+      var F5 = 51.56;
+      hudOut(2, F5); hudIn(3, F5 + 0.3);
+      move(F4 + 14.7, F5 + 2.8, { x: 4450, y: 420, s: 0.95 }, "sine.inOut", 0.25);
+      sticky(S3need, F5 + 2.5);
+      show(ax3, F5 + 3.4, 0.5);
+      move(F5 + 4.6, F5 + 6.2, { x: 4380, y: 430, s: 1.22 });
+      show(lnA, F5 + 5.2, 0.45);
+      mA.forEach(function (m, k) { pop(m, F5 + [7.0, 7.6, 8.0][k], 0.35); });
+      show(giveUp, F5 + 8.4, 0.4, { opacity: 0, x: -10 });
+      move(F5 + 8.5, F5 + 9.7, { x: 4480, y: 580, s: 1.22 });
+      show(lnB, F5 + 8.9, 0.45);
+      tl.fromTo(barB, { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 1.0, ease: "power1.inOut" }, F5 + 10.0);
+      mB.forEach(function (m, k) { pop(m, F5 + 10.05 + k * 0.25, 0.35); });
+      show(t120, F5 + 10.9, 0.45, { opacity: 0, x: -10 });
+      move(F5 + 11.3, F5 + 12.5, { x: 4480, y: 720, s: 1.22 });
+      show(lnC, F5 + 12.3, 0.45); show(bgNote, F5 + 12.6, 0.4);
+      mC.forEach(function (m, k) { pop(m, F5 + [13.1, 13.4, 14.0][k], 0.35); });
+      move(F5 + 14.3, F5 + 16.2, { x: 4450, y: 430, s: 0.95 });
+      sticky(S3design, F5 + 14.8);
+
+      // ----- Frame 6 · layer 04 final notes (67.84–84.32) -----
+      var F6 = 67.84;
+      hudOut(3, F6); hudIn(4, F6 + 0.3);
+      move(F6, F6 + 2.6, { x: 4560, y: 1330, s: 1.0 });
+      sticky(S4need, F6 + 1.4);
+      draw(js4line, F6 + 3.4, 0.7); show(js4.querySelector("text"), F6 + 3.8, 0.4); show(js4t, F6 + 4.2, 0.4);
+      draw(redo4p, F6 + 4.8, 0.7, "power2.out"); show(redo4t, F6 + 5.2, 0.4);
+      move(F6 + 6.3, F6 + 7.6, { x: 4600, y: 1320, s: 1.15 });
+      drawBox(p4a, F6 + 7.9); drawBox(p4b, F6 + 8.9);
+      drawConn(c4a, F6 + 10.8, 0.45); drawConn(c4b, F6 + 10.95, 0.45);
+      tl.fromTo(lock4.querySelector("rect"), { opacity: 0 }, { opacity: 1, duration: 0.3 }, F6 + 11.0);
+      draw(lock4line, F6 + 11.0, 0.5); show(lock4.querySelectorAll("text, circle"), F6 + 11.3, 0.35);
+      drawConn(c4p, F6 + 11.6, 0.4); drawBox(fn4, F6 + 11.8);
+      drawConn(late4, F6 + 13.0, 0.8);
+      drawAll(x4, F6 + 14.0, 0.25, 0.12); show(late4t, F6 + 14.3, 0.4, { opacity: 0, x: -10 });
+      move(F6 + 14.5, F6 + 16.4, { x: 4560, y: 1380, s: 0.98 });
+      sticky(S4design, F6 + 14.8);
+
+      // ----- Frame 7 · layer 05 corrections (84.32–99.14) -----
+      var F7 = 84.32;
+      hudOut(4, F7); hudIn(5, F7 + 0.3);
+      move(F6 + 16.4, F7 + 2.6, { x: 3860, y: 2150, s: 1.12 }, "sine.inOut", 0.12);
+      sticky(S5need, F7 + 1.3);
+      drawBox(ch5[0], F7 + 2.0); drawConn(ca5[0], F7 + 3.0, 0.35); drawBox(ch5[1], F7 + 3.2); drawConn(ca5[1], F7 + 4.1, 0.35); drawBox(ch5[2], F7 + 4.3);
+      err5.forEach(function (e, k) { pop(e, F7 + [2.6, 3.6, 5.0][k], 0.4); });
+      move(F7 + 2.6, F7 + 5.4, { x: 4700, y: 2150, s: 1.12 });
+      move(F7 + 5.6, F7 + 7.4, { x: 4400, y: 2320, s: 0.92 });
+      pr5.forEach(function (t, k) { show(t, F7 + 6.0 + k * 0.1, 0.4); });
+      drawBox(fix5, F7 + 6.2); show(fix5tag, F7 + 6.8, 0.35);
+      drawConn(bus5, F7 + 7.9, 0.6); up5.forEach(function (c, k) { drawConn(c, F7 + 8.3 + k * 0.15, 0.3); });
+      show(win5, F7 + 9.4, 0.45);
+      err5.forEach(function (e, k) { tl.to(e, { opacity: 0, scale: 0.6, transformOrigin: "50% 50%", duration: 0.35, ease: "power1.in" }, F7 + 9.6 + k * 0.1); });
+      sticky(S5design, F7 + 10.2);
+      drawBox(own5, F7 + 11.1); show(own5tag, F7 + 11.6, 0.35);
+      drawConn(own5a, F7 + 11.8, 0.8); show(own5t, F7 + 12.6, 0.45, { opacity: 0, x: -10 });
+
+      // ----- Frame 8 · layer 06 translations (99.14–113.44) -----
+      var F8 = 99.14;
+      hudOut(5, F8); hudIn(6, F8 + 0.3);
+      move(F7 + 13.5, F8 + 3.0, { x: 2200, y: 2320, s: 1.0 }, "sine.inOut", 0.2);
+      sticky(S6need, F8 + 1.9);
+      tl.fromTo(doc6.querySelector("rect"), { opacity: 0 }, { opacity: 1, duration: 0.4 }, F8 + 3.8);
+      draw(doc6line, F8 + 3.7, 0.6); show(doc6.querySelectorAll("text"), F8 + 4.1, 0.4);
+      drawAll(Array.prototype.slice.call(doc6.querySelectorAll("path")).slice(1), F8 + 4.3, 0.25, 0.08);
+      show(sep6, F8 + 4.8, 0.5);
+      sticky(S6design, F8 + 5.6);
+      br6.forEach(function (c, k) { drawConn(c, F8 + 5.4 + k * 0.12, 0.5); });
+      cards6.forEach(function (c, k) { pop(c, F8 + [6.8, 7.4, 7.8, 8.2][k], 0.4); });
+      show(four6, F8 + 8.6, 0.4);
+      move(F8 + 9.0, F8 + 10.4, { x: 2440, y: 2290, s: 1.1 });
+      drawAll(xPL, F8 + 9.8, 0.3, 0.12); show(tPL, F8 + 10.3, 0.4, { opacity: 0, x: -10 });
+      show(tDE, F8 + 11.4, 0.4, { opacity: 0, x: -10 });
+      drawAll(xDE, F8 + 12.1, 0.25, 0.1); show(tDE2, F8 + 12.3, 0.4);
+
+      // ----- Frame 9 · layer 07 phone (113.44–128.11) -----
+      var F9 = 113.44;
+      hudOut(6, F9); hudIn(7, F9 + 0.3);
+      move(F8 + 13.0, F9 + 2.7, { x: 114, y: 490, s: 0.8 }, "sine.inOut", 0.12);
+      follow(F9 + 2.7, F9 + 4.8, l7in, 0.8, 0.65);
+      sticky(S7need, F9 + 2.3);
+      tl.fromTo(ph7.querySelector("rect"), { opacity: 0 }, { opacity: 1, duration: 0.4 }, F9 + 4.0);
+      draw(ph7line, F9 + 3.9, 0.8); draw(mic7p, F9 + 4.4, 0.6); show(https7, F9 + 5.0, 0.45);
+      move(F9 + 4.8, F9 + 6.4, { x: -950, y: 640, s: 0.95 });
+      draw(tun7[0], F9 + 6.7, 0.9, null, "0.02 0.012"); draw(tun7[1], F9 + 6.85, 0.9, null, "0.02 0.012"); show(tun7t, F9 + 7.0, 0.4); show(tun7s, F9 + 7.3, 0.4);
+      drawBox(mac7, F9 + 8.0);
+      pop(pwa7, F9 + 9.6, 0.45);
+      sticky(S7design, F9 + 10.0);
+      draw(cl7line, F9 + 10.9, 0.7); show(cl7.querySelector("text"), F9 + 11.2, 0.4); drawConn(up7, F9 + 11.3, 0.6);
+      drawAll(x7, F9 + 12.4, 0.3, 0.12); show(no7, F9 + 12.9, 0.4);
+
+      // ----- Frame 10 · close (128.11–135.95) -----
+      var F10 = 128.11;
+      hudOut(7, F10);
+      move(F10 - 0.8, F10 + 3.6, { x: 1790, y: 1350, s: 0.263 });
+      rings.forEach(function (r, k) { draw(r, F10 + 0.3 + k * 0.1, 0.6, "power2.out"); });
+      tags.forEach(function (t, k) { show(t, F10 + 1.2 + k * 0.12, 0.45); });
+      tl.to(world, { opacity: 0.2, duration: 1.0, ease: "power1.inOut" }, F10 + 3.0);
+      show($("close-k"), F10 + 3.0, 0.5);
+      write($("close-t"), F10 + 3.3, 2.0);
+
+      // camera driver: one linear proxy over the whole film, pose recomputed from time
+      var camProxy = { t: 0 };
+      tl.fromTo(camProxy, { t: 0 }, { t: TOTAL, duration: TOTAL, ease: "none", onUpdate: function () { applyCam(camProxy.t); } }, 0);
+      applyCam(0);
+      window.__bdCamAt = camAt; // diagnostics: camera pose at time t
+      window.__timelines["board"] = tl;
+    })();
+  </script>
+</template>
