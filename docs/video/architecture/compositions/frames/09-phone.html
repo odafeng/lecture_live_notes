@@ -1,0 +1,412 @@
+<template>
+  <style>
+    @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+    @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      container-type: size;
+      color: #1F2BE0;
+    }
+
+    /* ---------- ground: paper + permanent graph grid + hairlines ---------- */
+    [id="09-phone-ground"] {
+      position: absolute;
+      inset: 0;
+      background-color: #F0EBDE;
+      background-image:
+        linear-gradient(to right, rgba(31,43,224,0.10) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(31,43,224,0.10) 1px, transparent 1px);
+      background-size: 2cqw 2cqw;
+    }
+    [class~="09-phone-hairline"] {
+      position: absolute;
+      left: 4cqw;
+      right: 4cqw;
+      height: 0.12cqw;
+      background: #1F2BE0;
+    }
+    [class~="09-phone-chrome"] {
+      position: absolute;
+      bottom: 3.7cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 0.73cqw;
+      letter-spacing: 0.06em;
+      color: #1F2BE0;
+    }
+
+    /* ---------- content layer ---------- */
+    [id="09-phone-content"] {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* top bar */
+    [id="09-phone-layer"] {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 5cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 1.05cqw;
+      letter-spacing: 0.08em;
+    }
+    [id="09-phone-title"] {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 6.6cqw;
+      font-family: "Newsreader", "Noto Serif TC", serif;
+      font-weight: 400;
+      font-size: 4.6cqw;
+      line-height: 1.25;
+    }
+    [id="09-phone-rule"] {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 13.6458cqw;
+      width: 68.75cqw;
+      height: 0.12cqw;
+      background: #1F2BE0;
+      transform-origin: 0% 50%;
+    }
+
+    /* minimap */
+    [id="09-phone-minimap"] {
+      position: absolute;
+      left: 75cqw;
+      top: 5cqw;
+      width: 20.8333cqw;
+      height: 8.8542cqw;
+      background: #F0EBDE;
+      border: 0.12cqw solid #1F2BE0;
+      box-sizing: border-box;
+    }
+    [id="09-phone-minimap-label"] {
+      position: absolute;
+      left: 0;
+      top: -1.3cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 0.78cqw;
+      letter-spacing: 0.06em;
+      color: #1F2BE0;
+    }
+    [id="09-phone-minimap"] svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* left column cards */
+    [class~="09-phone-card"] {
+      position: absolute;
+      left: 4.1667cqw;
+      width: 28.125cqw;
+    }
+    [id="09-phone-need"] { top: 17.1875cqw; }
+    [id="09-phone-design"] { top: 30.2083cqw; }
+    [class~="09-phone-label"] {
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 600;
+      font-size: 1.4cqw;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      line-height: 1.3;
+      margin-bottom: 0.7cqw;
+    }
+    [class~="09-phone-line"] {
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 400;
+      font-size: 1.6cqw;
+      line-height: 1.4;
+    }
+    [class~="09-phone-line2"] { margin-top: 0.5cqw; }
+    [class~="09-phone-mono"] {
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 1.4cqw;
+      letter-spacing: 0.05em;
+      line-height: 1.4;
+      margin-top: 0.9cqw;
+    }
+    [id="09-phone-divider"] {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 28.5417cqw;
+      width: 28.125cqw;
+      height: 0.06cqw;
+      background: rgba(31,43,224,0.18);
+      transform-origin: 0% 50%;
+    }
+
+    /* css-marker highlight (cobalt at faint opacity — two-color safe) */
+    [class~="09-phone-hl-wrap"] {
+      position: relative;
+      display: inline;
+    }
+    [class~="09-phone-hl-bar"] {
+      position: absolute;
+      left: -0.3cqw;
+      right: -0.3cqw;
+      top: 8%;
+      bottom: 4%;
+      background: #1F2BE0;
+      opacity: 0.18;
+      transform-origin: 0% 50%;
+      z-index: 0;
+    }
+    [class~="09-phone-hl-text"] {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* main stage svg */
+    [id="09-phone-stage"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    [class~="09-phone-draw"] {
+      fill: none;
+      stroke: #1F2BE0;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+    }
+    [class~="09-phone-svg-mono"] {
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      letter-spacing: 0.05em;
+    }
+    [class~="09-phone-svg-body"] {
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 600;
+    }
+  </style>
+
+  <div id="root" data-composition-id="09-phone" data-width="1920" data-height="1080" data-duration="15.07">
+
+    <!-- full-bleed ground on the lowest track -->
+    <div id="09-phone-ground" class="clip" data-start="0" data-duration="15.07" data-track-index="0">
+      <div class="09-phone-hairline" style="top: 3cqw;"></div>
+      <div class="09-phone-hairline" style="bottom: 3cqw;"></div>
+      <div class="09-phone-chrome" style="left: 4cqw;">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="09-phone-chrome" style="right: 4cqw;">09 / 10</div>
+    </div>
+
+    <div id="09-phone-content" class="clip" data-start="0" data-duration="15.07" data-track-index="1">
+
+      <!-- top bar -->
+      <div id="09-phone-layer">LAYER 07 / 07</div>
+      <div id="09-phone-title">手機</div>
+      <div id="09-phone-rule"></div>
+
+      <!-- minimap: standard diagram at ~0.227x -->
+      <div id="09-phone-minimap" data-layout-allow-overlap>
+        <div id="09-phone-minimap-label">架構位置</div>
+        <svg viewBox="60 156 1760 748" xmlns="http://www.w3.org/2000/svg">
+          <!-- faint base -->
+          <g fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="10">
+            <rect x="580" y="300" width="580" height="560" stroke-dasharray="50 34" />
+            <rect x="120" y="420" width="320" height="140" />
+            <rect x="680" y="400" width="380" height="180" />
+            <rect x="720" y="680" width="300" height="120" />
+            <rect x="1340" y="240" width="420" height="140" />
+            <rect x="1340" y="600" width="420" height="140" />
+            <path d="M440 490 H680" />
+            <path d="M1060 450 H1200 V310 H1340" />
+            <path d="M1060 530 H1200 V670 H1340" />
+            <path d="M870 580 V680" />
+          </g>
+          <g class="09-phone-svg-body" fill="rgba(31,43,224,0.18)" font-size="62" text-anchor="middle">
+            <text x="280" y="512">瀏覽器</text>
+            <text x="870" y="512">FastAPI</text>
+            <text x="870" y="762">磁碟</text>
+            <text x="1550" y="332">Live</text>
+            <text x="1550" y="692">Flash</text>
+          </g>
+          <!-- lit: browser + browser→server -->
+          <g id="09-phone-mini-lit">
+            <rect x="120" y="420" width="320" height="140" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="10" />
+            <path d="M440 490 H672" fill="none" stroke="#1F2BE0" stroke-width="16" />
+            <path d="M650 466 L680 490 L650 514 Z" fill="#1F2BE0" />
+            <text class="09-phone-svg-body" x="280" y="512" font-size="62" text-anchor="middle" fill="#F0EBDE">瀏覽器</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- need card -->
+      <div id="09-phone-need" class="09-phone-card">
+        <div id="09-phone-need-label" class="09-phone-label">需求</div>
+        <div id="09-phone-need-1" class="09-phone-line">上課最順手的是手機。</div>
+        <div id="09-phone-need-2" class="09-phone-line 09-phone-line2">麥克風只在 <span class="09-phone-hl-wrap"><span id="09-phone-hl-https" class="09-phone-hl-bar"></span><span class="09-phone-hl-text">HTTPS</span></span> 底下才能開</div>
+      </div>
+
+      <div id="09-phone-divider"></div>
+
+      <!-- design card -->
+      <div id="09-phone-design" class="09-phone-card">
+        <div id="09-phone-design-label" class="09-phone-label">設計</div>
+        <div id="09-phone-design-1" class="09-phone-line">手機透過 Tailscale Serve 連回自己的 Mac</div>
+        <div id="09-phone-design-adr" class="09-phone-mono">ADR 0007</div>
+        <div id="09-phone-design-local" class="09-phone-mono"><span class="09-phone-hl-wrap"><span id="09-phone-hl-local" class="09-phone-hl-bar"></span><span class="09-phone-hl-text">不上雲</span></span></div>
+      </div>
+
+      <!-- main stage -->
+      <svg id="09-phone-stage" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+
+        <!-- cloud (counter-example): stepped square outline, straight segments only -->
+        <g id="09-phone-cloud">
+          <path id="09-phone-cloud-path" class="09-phone-draw" stroke-width="3"
+                d="M1130 520 V440 H1200 V390 H1290 V345 H1420 V385 H1510 V430 H1590 V520 Z" />
+          <g id="09-phone-chip-key">
+            <rect x="1160" y="455" width="170" height="50" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+            <text class="09-phone-svg-mono" x="1245" y="490" font-size="27" text-anchor="middle" fill="#1F2BE0">API key</text>
+          </g>
+          <g id="09-phone-chip-content">
+            <rect x="1370" y="455" width="190" height="50" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+            <text class="09-phone-svg-mono" x="1465" y="490" font-size="27" text-anchor="middle" fill="#1F2BE0">課堂內容</text>
+          </g>
+        </g>
+        <path id="09-phone-strike-a" class="09-phone-draw" stroke-width="3.1" d="M1105 330 L1615 535" />
+        <path id="09-phone-strike-b" class="09-phone-draw" stroke-width="3.1" d="M1615 330 L1105 535" />
+
+        <!-- HTTPS lock seal above the phone -->
+        <g id="09-phone-seal">
+          <rect x="720" y="352" width="280" height="104" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="3" />
+          <rect x="736" y="394" width="40" height="34" fill="#1F2BE0" />
+          <rect x="753" y="404" width="6" height="14" fill="#F0EBDE" />
+          <path id="09-phone-shackle" class="09-phone-draw" stroke-width="5" d="M744 394 V376 H768 V394" />
+          <text class="09-phone-svg-mono" x="790" y="397" font-size="27" fill="#1F2BE0">getUserMedia</text>
+          <text class="09-phone-svg-mono" x="790" y="439" font-size="27" fill="#1F2BE0">只在 HTTPS 開</text>
+        </g>
+        <path id="09-phone-seal-tick" class="09-phone-draw" stroke-width="2.3" d="M860 456 V480" />
+
+        <!-- phone outline -->
+        <path id="09-phone-body" class="09-phone-draw" stroke-width="4" d="M760 480 H960 V860 H760 Z" />
+        <path id="09-phone-screen" class="09-phone-draw" stroke-width="2.3" d="M780 520 H940 V812 H780 Z" />
+        <path id="09-phone-speaker" class="09-phone-draw" stroke-width="4" d="M838 500 H882" />
+        <path id="09-phone-home" class="09-phone-draw" stroke-width="4" d="M842 836 H878" />
+
+        <!-- PWA chip inside the screen -->
+        <g id="09-phone-pwa">
+          <rect x="805" y="611" width="110" height="110" fill="#1F2BE0" />
+          <text class="09-phone-svg-body" x="860" y="677" font-size="30" text-anchor="middle" fill="#F0EBDE" letter-spacing="1.5">PWA</text>
+        </g>
+
+        <!-- tunnel: phone → Mac -->
+        <path id="09-phone-rail-top" class="09-phone-draw" stroke-width="3" d="M960 652 H1480" />
+        <path id="09-phone-rail-bot" class="09-phone-draw" stroke-width="3" d="M960 688 H1480" />
+        <path id="09-phone-rail-mid" class="09-phone-draw" stroke-width="2.3" d="M972 670 H1458" />
+        <path id="09-phone-arrow" d="M1454 660 L1474 670 L1454 680 Z" fill="#1F2BE0" />
+        <text id="09-phone-tun-name" class="09-phone-svg-body" x="1220" y="630" font-size="30" text-anchor="middle" fill="#1F2BE0">Tailscale Serve</text>
+        <text id="09-phone-tun-host" class="09-phone-svg-mono" x="1220" y="728" font-size="27" text-anchor="middle" fill="#1F2BE0">*.ts.net HTTPS</text>
+
+        <!-- your Mac -->
+        <g id="09-phone-mac">
+          <rect x="1480" y="590" width="320" height="160" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="3" />
+          <text class="09-phone-svg-body" x="1640" y="657" font-size="32" text-anchor="middle" fill="#F0EBDE">你的 Mac</text>
+          <text class="09-phone-svg-mono" x="1640" y="706" font-size="27" text-anchor="middle" fill="#F0EBDE">127.0.0.1:8000</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      var $ = function (name) { return document.getElementById("09-phone-" + name); };
+      var tl = gsap.timeline({ paused: true });
+      var E = "power3.out";
+
+      // svg-path-draw: measured length, offset len -> 0
+      function draw(name, at, dur, ease) {
+        var p = $(name);
+        var len = p.getTotalLength() * 1.02;
+        tl.fromTo(p,
+          { strokeDasharray: len, strokeDashoffset: len },
+          { strokeDashoffset: 0, duration: dur, ease: ease || "power2.out" },
+          at);
+      }
+      // fade-rise entrance
+      function rise(name, at, dist, dur) {
+        tl.fromTo($(name),
+          { opacity: 0, y: dist === undefined ? 16 : dist },
+          { opacity: 1, y: 0, duration: dur || 0.6, ease: E },
+          at);
+      }
+      // spring-pop entrance (smooth settle, no overshoot)
+      function pop(name, at, dur) {
+        tl.fromTo($(name),
+          { scale: 0, opacity: 0, transformOrigin: "50% 50%" },
+          { scale: 1, opacity: 1, duration: dur || 0.55, ease: E },
+          at);
+      }
+      // css-marker highlight sweep
+      function mark(name, at) {
+        tl.fromTo($(name), { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.out" }, at);
+      }
+
+      // Scene 1 (0.0–2.2): minimap settles, top bar, then lit boxes
+      tl.fromTo($("minimap"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 0);
+      rise("layer", 0.3, 14, 0.5);
+      rise("title", 0.45, 28, 0.7);
+      tl.fromTo($("rule"), { scaleX: 0 }, { scaleX: 1, duration: 0.9, ease: E }, 0.6);
+      tl.fromTo($("mini-lit"), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power1.out" }, 1.25);
+
+      // Scene 2 (2.3–3.8): need card + phone outline draws
+      rise("need-label", 2.3, 14, 0.5);
+      rise("need-1", 2.4, 18, 0.6);
+      draw("body", 2.4, 0.8);
+      draw("screen", 2.95, 0.6);
+      draw("speaker", 3.4, 0.3);
+      draw("home", 3.5, 0.3);
+
+      // Scene 3 (3.9–6.6): HTTPS lock seal + need line 2
+      pop("seal", 3.9, 0.55);
+      draw("shackle", 4.15, 0.4);
+      draw("seal-tick", 4.35, 0.3);
+      rise("need-2", 4.7, 18, 0.6);
+      mark("hl-https", 5.4);
+
+      // Scene 4 (6.7–9.4): design card, tunnel draws, Mac arrives at 8.0
+      tl.fromTo($("divider"), { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: E }, 6.6);
+      rise("design-label", 6.7, 14, 0.5);
+      rise("design-1", 6.8, 18, 0.6);
+      rise("design-adr", 7.2, 12, 0.5);
+      draw("rail-top", 6.7, 1.2);
+      draw("rail-bot", 6.8, 1.2);
+      draw("rail-mid", 6.9, 1.0);
+      tl.fromTo($("arrow"), { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power1.out" }, 7.8);
+      rise("tun-name", 7.2, 12, 0.6);
+      rise("tun-host", 7.4, 12, 0.6);
+      pop("mac", 8.0, 0.6);
+
+      // Scene 5 (9.5–10.8): PWA chip inside the phone screen
+      pop("pwa", 9.6, 0.55);
+
+      // Scene 6 (10.9–14.67): cloud + labels, then struck out
+      draw("cloud-path", 10.9, 0.8);
+      pop("chip-key", 11.35, 0.5);
+      pop("chip-content", 11.5, 0.5);
+      draw("strike-a", 12.4, 0.35);
+      draw("strike-b", 12.6, 0.35);
+      tl.to([$("cloud-path"), $("chip-key"), $("chip-content")], { opacity: 0.4, duration: 0.5, ease: "power1.out" }, 13.0);
+      rise("design-local", 12.65, 12, 0.5);
+      mark("hl-local", 13.1);
+
+      // hold to the end of the frame
+      tl.to({}, { duration: 0 }, 14.67);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["09-phone"] = tl;
+    })();
+  </script>
+</template>

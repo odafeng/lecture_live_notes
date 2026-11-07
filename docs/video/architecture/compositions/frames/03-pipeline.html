@@ -1,0 +1,659 @@
+<template>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+  <style>
+    @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+    @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      container-type: size;
+      /* 1 design px on the 1920 canvas, resolved against #root (frame.md container law) */
+      --u: calc(100cqw / 1920);
+      --paper: #F0EBDE;
+      --ink: #1F2BE0;
+      --grid: rgba(31, 43, 224, 0.10);
+      --faint: rgba(31, 43, 224, 0.18);
+      --f-display: "Newsreader", "Noto Serif TC", serif;
+      --f-body: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      --f-mono: "DM Mono", "Noto Sans TC", monospace;
+      color: var(--ink);
+    }
+
+    /* ---------- ground (full-bleed clip) ---------- */
+    .p03-ground {
+      position: absolute;
+      inset: 0;
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(to right, var(--grid) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+      background-size: 2cqw 2cqw;
+      z-index: 0;
+    }
+    .p03-hair {
+      position: absolute;
+      left: calc(77 * var(--u));
+      right: calc(77 * var(--u));
+      height: 0.12cqw;
+      background: var(--ink);
+    }
+    .p03-hair-top { top: calc(58 * var(--u)); }
+    .p03-hair-bot { top: calc(1020 * var(--u)); }
+    .p03-chrome {
+      position: absolute;
+      top: calc(986 * var(--u));
+      font-family: var(--f-mono);
+      font-size: calc(13 * var(--u));
+      letter-spacing: 0.06em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .p03-chrome-l { left: calc(80 * var(--u)); }
+    .p03-chrome-r { right: calc(80 * var(--u)); }
+
+    /* ---------- content layer ---------- */
+    .p03-stage {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    /* top bar */
+    .p03-layer {
+      position: absolute;
+      left: calc(80 * var(--u));
+      top: calc(100 * var(--u));
+      font-family: var(--f-mono);
+      font-size: calc(22 * var(--u));
+      letter-spacing: 0.06em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .p03-title {
+      position: absolute;
+      left: calc(80 * var(--u));
+      top: calc(132 * var(--u));
+      font-family: var(--f-display);
+      font-weight: 400;
+      font-size: calc(88 * var(--u));
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .p03-rule {
+      position: absolute;
+      left: calc(80 * var(--u));
+      top: calc(262 * var(--u));
+      width: calc(1320 * var(--u));
+      height: 0.12cqw;
+      background: var(--ink);
+      transform-origin: 0% 50%;
+    }
+
+    /* minimap */
+    .p03-mm {
+      position: absolute;
+      left: calc(1440 * var(--u));
+      top: calc(96 * var(--u));
+      width: calc(400 * var(--u));
+      height: calc(170 * var(--u));
+      background: var(--paper);
+      border: 0.12cqw solid var(--ink);
+      box-sizing: border-box;
+    }
+    .p03-mm-label {
+      position: absolute;
+      left: calc(14 * var(--u));
+      top: calc(-10 * var(--u));
+      padding: 0 calc(6 * var(--u));
+      background: var(--paper);
+      font-family: var(--f-mono);
+      font-size: calc(14 * var(--u));
+      line-height: calc(18 * var(--u));
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .p03-mm svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .p03-mm text {
+      font-family: var(--f-body);
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    /* left column cards */
+    .p03-card-label {
+      position: absolute;
+      left: calc(80 * var(--u));
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      font-family: var(--f-body);
+      font-weight: 700;
+      font-size: calc(20 * var(--u));
+      letter-spacing: 0.18em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .p03-tick {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+      background: var(--ink);
+    }
+    .p03-need-label { top: calc(332 * var(--u)); }
+    .p03-need-text {
+      position: absolute;
+      left: calc(80 * var(--u));
+      top: calc(374 * var(--u));
+      width: calc(540 * var(--u));
+      font-family: var(--f-body);
+      font-weight: 500;
+      font-size: calc(40 * var(--u));
+      line-height: 1.35;
+    }
+    .p03-divider {
+      position: absolute;
+      left: calc(80 * var(--u));
+      top: calc(520 * var(--u));
+      width: calc(540 * var(--u));
+      height: calc(1.2 * var(--u));
+      background: var(--faint);
+      transform-origin: 0% 50%;
+    }
+    .p03-design-label { top: calc(558 * var(--u)); }
+    .p03-design-text {
+      position: absolute;
+      left: calc(80 * var(--u));
+      top: calc(600 * var(--u));
+      width: calc(540 * var(--u));
+      font-family: var(--f-body);
+      font-weight: 500;
+      font-size: calc(32 * var(--u));
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+    .p03-design-mono {
+      position: absolute;
+      left: calc(80 * var(--u));
+      top: calc(716 * var(--u));
+      font-family: var(--f-mono);
+      font-size: calc(26 * var(--u));
+      letter-spacing: 0.04em;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+
+    /* pipeline strip */
+    .p03-box {
+      position: absolute;
+      top: calc(380 * var(--u));
+      width: calc(196 * var(--u));
+      height: calc(240 * var(--u));
+      background: var(--paper);
+      border: 0.12cqw solid var(--ink);
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .p03-idx {
+      position: absolute;
+      left: calc(12 * var(--u));
+      top: calc(10 * var(--u));
+      font-family: var(--f-mono);
+      font-size: calc(15 * var(--u));
+      letter-spacing: 0.06em;
+      line-height: 1;
+      color: var(--ink);
+    }
+    .p03-st-title {
+      position: absolute;
+      top: calc(640 * var(--u));
+      width: calc(196 * var(--u));
+      text-align: center;
+      font-family: var(--f-body);
+      font-weight: 600;
+      font-size: calc(28 * var(--u));
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .p03-st-note {
+      position: absolute;
+      top: calc(744 * var(--u));
+      width: calc(236 * var(--u));
+      text-align: center;
+      font-family: var(--f-mono);
+      font-size: calc(19 * var(--u));
+      letter-spacing: 0;
+      line-height: 1.35;
+      white-space: nowrap;
+    }
+    .p03-arrow {
+      position: absolute;
+      top: calc(492 * var(--u));
+      width: calc(28 * var(--u));
+      height: calc(16 * var(--u));
+      transform-origin: 0% 50%;
+      overflow: visible;
+    }
+
+    /* station 1: waveform */
+    .p03-wave {
+      position: absolute;
+      left: calc(14 * var(--u));
+      top: calc(58 * var(--u));
+      width: calc(168 * var(--u));
+      height: calc(128 * var(--u));
+      overflow: visible;
+    }
+    .p03-wave-path {
+      fill: none;
+      stroke: var(--ink);
+      stroke-width: 3;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+    }
+    .p03-wave-base {
+      stroke: var(--faint);
+      stroke-width: 1.5;
+    }
+
+    /* station 2: transcript lines */
+    .p03-line {
+      position: absolute;
+      left: calc(18 * var(--u));
+      display: flex;
+      gap: calc(8 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .p03-line span {
+      display: block;
+      height: 100%;
+      background: var(--ink);
+    }
+
+    /* station 3: pixel cells */
+    .p03-cells {
+      position: absolute;
+      left: calc(16 * var(--u));
+      top: calc(92 * var(--u));
+      width: calc(164 * var(--u));
+      display: grid;
+      grid-template-columns: repeat(5, calc(28 * var(--u)));
+      grid-auto-rows: calc(28 * var(--u));
+      gap: calc(6 * var(--u));
+    }
+    .p03-cell {
+      position: relative;
+      background: var(--grid);
+      outline: calc(1.2 * var(--u)) solid var(--faint);
+      outline-offset: calc(-1.2 * var(--u));
+    }
+    .p03-cell-on {
+      position: absolute;
+      inset: 0;
+      background: var(--ink);
+      transform-origin: 50% 50%;
+    }
+
+    /* station 4: scale-swap 10 -> 1 */
+    .p03-swap {
+      position: absolute;
+      left: calc(16 * var(--u));
+      top: calc(56 * var(--u));
+      width: calc(164 * var(--u));
+      height: calc(124 * var(--u));
+    }
+    .p03-swap-out,
+    .p03-swap-in {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: 50% 50%;
+    }
+    .p03-swap-out { z-index: 1; }
+    .p03-swap-in { z-index: 2; }
+    .p03-mini-grid {
+      display: grid;
+      grid-template-columns: repeat(5, calc(24 * var(--u)));
+      grid-auto-rows: calc(24 * var(--u));
+      gap: calc(10 * var(--u));
+    }
+    .p03-mini {
+      background: var(--ink);
+      transform-origin: 50% 50%;
+    }
+    .p03-chapter-big {
+      width: calc(92 * var(--u));
+      height: calc(92 * var(--u));
+      background: var(--ink);
+    }
+    .p03-swap-sub {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(196 * var(--u));
+      text-align: center;
+      font-family: var(--f-mono);
+      font-size: calc(17 * var(--u));
+      letter-spacing: 0.04em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    /* station 5: chapters -> final_notes.md */
+    .p03-fill {
+      position: absolute;
+      inset: 0;
+      background: var(--ink);
+    }
+    .p03-chap {
+      position: absolute;
+      top: calc(50 * var(--u));
+      width: calc(30 * var(--u));
+      height: calc(30 * var(--u));
+      background: var(--ink);
+      transform-origin: 50% 50%;
+    }
+    .p03-final {
+      position: absolute;
+      left: calc(18 * var(--u));
+      top: calc(98 * var(--u));
+      width: calc(160 * var(--u));
+      height: calc(118 * var(--u));
+      background: var(--paper);
+      border: calc(2.3 * var(--u)) solid var(--ink);
+      box-sizing: border-box;
+      transform-origin: 50% 50%;
+    }
+    .p03-final-name {
+      position: absolute;
+      left: calc(10 * var(--u));
+      top: calc(10 * var(--u));
+      font-family: var(--f-mono);
+      font-size: calc(16 * var(--u));
+      letter-spacing: 0;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .p03-final-line {
+      position: absolute;
+      left: calc(10 * var(--u));
+      height: calc(6 * var(--u));
+      background: var(--ink);
+    }
+  </style>
+
+  <div id="root" data-composition-id="03-pipeline" data-start="0" data-duration="15.36" data-width="1920" data-height="1080">
+
+    <!-- background: paper + permanent grid + furniture -->
+    <div id="p03-ground" class="clip p03-ground" data-start="0" data-duration="15.36" data-track-index="0">
+      <div class="p03-hair p03-hair-top"></div>
+      <div class="p03-hair p03-hair-bot"></div>
+      <div class="p03-chrome p03-chrome-l">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="p03-chrome p03-chrome-r">03 / 10</div>
+    </div>
+
+    <div id="p03-stage" class="clip p03-stage" data-start="0" data-duration="15.36" data-track-index="1">
+
+      <!-- top bar -->
+      <div id="p03-layer" class="p03-layer">LAYER 01 / 07</div>
+      <div id="p03-title" class="p03-title">資料流</div>
+      <div id="p03-rule" class="p03-rule"></div>
+
+      <!-- minimap -->
+      <div id="p03-mm" class="p03-mm">
+        <svg viewBox="0 0 400 170" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="p03-mk-faint" viewBox="0 0 6 6" refX="5.5" refY="3" markerWidth="5" markerHeight="5" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+              <path d="M0 0 L6 3 L0 6 Z" fill="rgba(31,43,224,0.18)" />
+            </marker>
+            <marker id="p03-mk-ink" viewBox="0 0 6 6" refX="5.5" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+              <path d="M0 0 L6 3 L0 6 Z" fill="#1F2BE0" />
+            </marker>
+          </defs>
+          <!-- base layer: everything faint -->
+          <g id="p03-mm-base" data-layout-allow-overlap>
+            <rect x="121.2" y="34" width="127.6" height="123.2" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.2" stroke-dasharray="4 3" />
+            <g fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.5">
+              <path d="M90.4 75.8 H143.2" marker-end="url(#p03-mk-faint)" />
+              <path d="M226.8 67 H257.6 V36.2 H288.4" marker-start="url(#p03-mk-faint)" marker-end="url(#p03-mk-faint)" />
+              <path d="M226.8 84.6 H257.6 V115.4 H288.4" marker-start="url(#p03-mk-faint)" marker-end="url(#p03-mk-faint)" />
+              <path d="M185 95.6 V117.6" marker-end="url(#p03-mk-faint)" />
+            </g>
+            <g fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="1.5">
+              <rect x="20" y="60.4" width="70.4" height="30.8" />
+              <rect x="143.2" y="56" width="83.6" height="39.6" />
+              <rect x="152" y="117.6" width="66" height="26.4" />
+              <rect x="288.4" y="20.8" width="92.4" height="30.8" />
+              <rect x="288.4" y="100" width="92.4" height="30.8" />
+            </g>
+            <g fill="rgba(31,43,224,0.18)" text-anchor="middle" dominant-baseline="central">
+              <text x="55.2" y="75.8">瀏覽器</text>
+              <text x="185" y="75.8">FastAPI</text>
+              <text x="185" y="130.8">磁碟</text>
+              <text x="334.6" y="36.2">Live</text>
+              <text x="334.6" y="115.4">Flash</text>
+            </g>
+          </g>
+          <!-- lit layer: browser, server, live, flash + their three links -->
+          <g id="p03-mm-lit" data-layout-allow-overlap>
+            <g fill="none" stroke="#1F2BE0" stroke-width="2">
+              <path d="M90.4 75.8 H143.2" marker-end="url(#p03-mk-ink)" />
+              <path d="M226.8 67 H257.6 V36.2 H288.4" marker-start="url(#p03-mk-ink)" marker-end="url(#p03-mk-ink)" />
+              <path d="M226.8 84.6 H257.6 V115.4 H288.4" marker-start="url(#p03-mk-ink)" marker-end="url(#p03-mk-ink)" />
+            </g>
+            <g fill="#1F2BE0" stroke="#1F2BE0" stroke-width="1.5">
+              <rect x="20" y="60.4" width="70.4" height="30.8" />
+              <rect x="143.2" y="56" width="83.6" height="39.6" />
+              <rect x="288.4" y="20.8" width="92.4" height="30.8" />
+              <rect x="288.4" y="100" width="92.4" height="30.8" />
+            </g>
+            <g fill="#F0EBDE" text-anchor="middle" dominant-baseline="central">
+              <text x="55.2" y="75.8">瀏覽器</text>
+              <text x="185" y="75.8">FastAPI</text>
+              <text x="334.6" y="36.2">Live</text>
+              <text x="334.6" y="115.4">Flash</text>
+            </g>
+          </g>
+        </svg>
+        <div class="p03-mm-label">架構位置</div>
+      </div>
+
+      <!-- left column: need / design -->
+      <div id="p03-need-label" class="p03-card-label p03-need-label"><span class="p03-tick"></span>需求</div>
+      <div id="p03-need-text" class="p03-need-text">還在上課，就要有筆記。</div>
+      <div id="p03-divider" class="p03-divider"></div>
+      <div id="p03-design-label" class="p03-card-label p03-design-label"><span class="p03-tick"></span>設計</div>
+      <div id="p03-design-text" class="p03-design-text">分層壓縮：<br />逐字稿 → 段落 → 章節 → 整併</div>
+      <div id="p03-design-mono" class="p03-design-mono">NOTE_WINDOW_SECONDS ·<br />ROLLUP_EVERY_BLOCKS</div>
+
+      <!-- pipeline strip: arrows -->
+      <svg id="p03-arrow-1" class="p03-arrow" style="left: calc(902 * var(--u));" viewBox="0 0 28 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 8 H20" stroke="#1F2BE0" stroke-width="2.3" /><path d="M18 2 L28 8 L18 14 Z" fill="#1F2BE0" /></svg>
+      <svg id="p03-arrow-2" class="p03-arrow" style="left: calc(1138 * var(--u));" viewBox="0 0 28 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 8 H20" stroke="#1F2BE0" stroke-width="2.3" /><path d="M18 2 L28 8 L18 14 Z" fill="#1F2BE0" /></svg>
+      <svg id="p03-arrow-3" class="p03-arrow" style="left: calc(1374 * var(--u));" viewBox="0 0 28 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 8 H20" stroke="#1F2BE0" stroke-width="2.3" /><path d="M18 2 L28 8 L18 14 Z" fill="#1F2BE0" /></svg>
+      <svg id="p03-arrow-4" class="p03-arrow" style="left: calc(1610 * var(--u));" viewBox="0 0 28 16" xmlns="http://www.w3.org/2000/svg"><path d="M0 8 H20" stroke="#1F2BE0" stroke-width="2.3" /><path d="M18 2 L28 8 L18 14 Z" fill="#1F2BE0" /></svg>
+
+      <!-- station 1: 16kHz PCM -->
+      <div id="p03-box-1" class="p03-box" style="left: calc(700 * var(--u));">
+        <div class="p03-idx">01</div>
+        <svg class="p03-wave" viewBox="0 -4 168 128" xmlns="http://www.w3.org/2000/svg">
+          <path class="p03-wave-base" d="M0 60 H168" />
+          <path id="p03-wave-path" class="p03-wave-path" d="M0 60 V52 H12 V82 H24 V46 H36 V100 H48 V34 H60 V112 H72 V42 H84 V104 H96 V30 H108 V116 H120 V40 H132 V96 H144 V48 H156 V64 H168 V60" />
+        </svg>
+      </div>
+      <div id="p03-title-1" class="p03-st-title" style="left: calc(700 * var(--u));">16kHz PCM</div>
+
+      <!-- station 2: transcript -->
+      <div id="p03-box-2" class="p03-box" style="left: calc(936 * var(--u));">
+        <div class="p03-idx">02</div>
+        <div id="p03-line-1" class="p03-line" style="top: calc(80 * var(--u));"><span style="width: calc(52 * var(--u));"></span><span style="width: calc(30 * var(--u));"></span><span style="width: calc(64 * var(--u));"></span></div>
+        <div id="p03-line-2" class="p03-line" style="top: calc(118 * var(--u));"><span style="width: calc(38 * var(--u));"></span><span style="width: calc(70 * var(--u));"></span><span style="width: calc(28 * var(--u));"></span></div>
+        <div id="p03-line-3" class="p03-line" style="top: calc(156 * var(--u));"><span style="width: calc(60 * var(--u));"></span><span style="width: calc(44 * var(--u));"></span></div>
+      </div>
+      <div id="p03-title-2" class="p03-st-title" style="left: calc(936 * var(--u));">逐字稿</div>
+      <div id="p03-note-2" class="p03-st-note" style="left: calc(916 * var(--u));">Gemini Live</div>
+
+      <!-- station 3: one note block every 60 s -->
+      <div id="p03-box-3" class="p03-box" style="left: calc(1172 * var(--u));">
+        <div class="p03-idx">03</div>
+        <div class="p03-cells">
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+          <div class="p03-cell"><div class="p03-cell-on"></div></div>
+        </div>
+      </div>
+      <div id="p03-title-3" class="p03-st-title" style="left: calc(1172 * var(--u));">每 60 秒<br />一段筆記</div>
+      <div id="p03-note-3" class="p03-st-note" style="left: calc(1152 * var(--u));">NOTE_WINDOW_SECONDS<br />= 60</div>
+
+      <!-- station 4: ten blocks fold into one chapter -->
+      <div id="p03-box-4" class="p03-box" style="left: calc(1408 * var(--u));">
+        <div class="p03-idx">04</div>
+        <div class="p03-swap">
+          <div id="p03-swap-out" class="p03-swap-out">
+            <div class="p03-mini-grid">
+              <div class="p03-mini"></div><div class="p03-mini"></div><div class="p03-mini"></div><div class="p03-mini"></div><div class="p03-mini"></div>
+              <div class="p03-mini"></div><div class="p03-mini"></div><div class="p03-mini"></div><div class="p03-mini"></div><div class="p03-mini"></div>
+            </div>
+          </div>
+          <div id="p03-swap-in" class="p03-swap-in"><div class="p03-chapter-big"></div></div>
+        </div>
+        <div id="p03-swap-sub" class="p03-swap-sub">10 → 1</div>
+      </div>
+      <div id="p03-title-4" class="p03-st-title" style="left: calc(1408 * var(--u));">每 10 段<br />一章</div>
+      <div id="p03-note-4" class="p03-st-note" style="left: calc(1388 * var(--u));">ROLLUP_EVERY_BLOCKS<br />= 10</div>
+
+      <!-- station 5: end of class -> final merge -->
+      <div id="p03-box-5" class="p03-box" style="left: calc(1644 * var(--u));">
+        <div id="p03-fill-5" class="p03-fill"></div>
+        <div id="p03-idx-5" class="p03-idx">05</div>
+        <div id="p03-chap-1" class="p03-chap" style="left: calc(41 * var(--u));"></div>
+        <div id="p03-chap-2" class="p03-chap" style="left: calc(83 * var(--u));"></div>
+        <div id="p03-chap-3" class="p03-chap" style="left: calc(125 * var(--u));"></div>
+        <div id="p03-final" class="p03-final">
+          <div class="p03-final-name">final_notes.md</div>
+          <div class="p03-final-line" style="top: calc(42 * var(--u)); width: calc(118 * var(--u));"></div>
+          <div class="p03-final-line" style="top: calc(58 * var(--u)); width: calc(92 * var(--u));"></div>
+          <div class="p03-final-line" style="top: calc(74 * var(--u)); width: calc(106 * var(--u));"></div>
+          <div class="p03-final-line" style="top: calc(90 * var(--u)); width: calc(68 * var(--u));"></div>
+        </div>
+      </div>
+      <div id="p03-title-5" class="p03-st-title" style="left: calc(1644 * var(--u));">下課<br />最終整併</div>
+      <div id="p03-note-5" class="p03-st-note" style="left: calc(1624 * var(--u));">final_prompt</div>
+
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.querySelector('[data-composition-id="03-pipeline"]');
+      var $ = function (id) { return root.querySelector("#" + id); };
+      var $$ = function (sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); };
+      var E = "power3.out";
+      var tl = gsap.timeline({ paused: true });
+
+      // ---- Scene 1 (0.0–1.5): top bar + minimap settle; pipeline boxes in minimap light after the layer name ----
+      tl.fromTo($("p03-mm"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 0.0);
+      tl.fromTo($("p03-layer"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 0.0);
+      tl.fromTo($("p03-title"), { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 0.12);
+      tl.fromTo($("p03-rule"), { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: E }, 0.1);
+      tl.fromTo($("p03-mm-lit"), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: E }, 0.9);
+
+      // ---- Scene 2 (1.6–4.2): need card ----
+      tl.fromTo($("p03-need-label"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 1.6);
+      tl.fromTo($("p03-need-text"), { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 1.85);
+
+      // ---- Scene 3 (4.3–6.3): design card + station 1 (waveform draws) ----
+      tl.fromTo($("p03-divider"), { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: E }, 4.3);
+      tl.fromTo($("p03-design-label"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 4.3);
+      tl.fromTo($("p03-design-text"), { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 4.45);
+      tl.fromTo($("p03-design-mono"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 4.8);
+
+      tl.fromTo($("p03-box-1"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 4.6);
+      var wave = $("p03-wave-path");
+      var waveLen = wave.getTotalLength() * 1.02;
+      wave.style.strokeDasharray = waveLen;
+      tl.fromTo(wave, { strokeDashoffset: waveLen }, { strokeDashoffset: 0, duration: 1.2, ease: E }, 4.8);
+      tl.fromTo($("p03-title-1"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 5.0);
+
+      // ---- Scene 4 (6.4–7.6): station 2, transcript lines flow in from the left ----
+      tl.fromTo($("p03-arrow-1"), { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.4, ease: E }, 6.4);
+      tl.fromTo($("p03-box-2"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 6.45);
+      ["p03-line-1", "p03-line-2", "p03-line-3"].forEach(function (id, i) {
+        tl.fromTo($(id),
+          { clipPath: "inset(0% 100% 0% 0%)", x: -24 },
+          { clipPath: "inset(0% 0% 0% 0%)", x: 0, duration: 0.6, ease: E },
+          6.65 + i * 0.18);
+      });
+      tl.fromTo($("p03-title-2"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 6.9);
+      tl.fromTo($("p03-note-2"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 7.05);
+
+      // ---- Scene 5 (7.7–9.6): station 3, note cells light one by one ----
+      tl.fromTo($("p03-arrow-2"), { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.4, ease: E }, 7.7);
+      tl.fromTo($("p03-box-3"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 7.75);
+      tl.fromTo($("p03-title-3"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 7.85);
+      tl.fromTo($("p03-note-3"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 8.0);
+      $$("#p03-box-3 .p03-cell-on").forEach(function (cell, i) {
+        tl.fromTo(cell, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3, ease: E }, 8.05 + i * 0.14);
+      });
+
+      // ---- Scene 6 (9.7–11.5): station 4, ten blocks scale-swap into one chapter ----
+      tl.fromTo($("p03-arrow-3"), { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.4, ease: E }, 9.7);
+      tl.fromTo($("p03-box-4"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 9.75);
+      tl.fromTo($("p03-title-4"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 9.85);
+      tl.fromTo($("p03-note-4"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 10.0);
+      $$("#p03-box-4 .p03-mini").forEach(function (sq, i) {
+        tl.fromTo(sq, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3, ease: E }, 9.9 + i * 0.03);
+      });
+      var SWAP = 10.5, EXIT_DUR = 0.35, OVERLAP = 0.15;
+      tl.fromTo($("p03-swap-out"), { scale: 1, opacity: 1 }, { scale: 0.7, opacity: 0, duration: EXIT_DUR, ease: "power2.in", immediateRender: false }, SWAP);
+      tl.fromTo($("p03-swap-in"), { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.6, ease: E }, SWAP + EXIT_DUR - OVERLAP);
+      tl.fromTo($("p03-swap-sub"), { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.4, ease: E }, SWAP + EXIT_DUR + 0.3);
+
+      // ---- Scene 7 (11.6–14.86): station 5, chapters merge into final_notes.md; station fills solid ----
+      tl.fromTo($("p03-arrow-4"), { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.4, ease: E }, 11.6);
+      tl.fromTo($("p03-box-5"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 11.65);
+      tl.fromTo($("p03-title-5"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 11.75);
+      tl.fromTo($("p03-note-5"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 11.9);
+      var chaps = [$("p03-chap-1"), $("p03-chap-2"), $("p03-chap-3")];
+      // converge toward the card centre: 42px / 64px on a 30px square, expressed as percent of its own size
+      var toCenter = [140, 0, -140];
+      chaps.forEach(function (c, i) {
+        tl.fromTo(c, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, 11.85 + i * 0.1);
+        tl.fromTo(c,
+          { opacity: 1, scale: 1, xPercent: 0, yPercent: 0 },
+          { opacity: 0, scale: 0.4, xPercent: toCenter[i], yPercent: 213, duration: 0.5, ease: E, immediateRender: false },
+          12.45 + i * 0.04);
+      });
+      tl.fromTo($("p03-final"), { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.6, ease: E }, 12.6);
+      tl.fromTo($("p03-fill-5"), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: E }, 13.0);
+      tl.fromTo($("p03-idx-5"), { color: "#1F2BE0" }, { color: "#F0EBDE", duration: 0.5, ease: E, immediateRender: false }, 13.0);
+
+      // hold the landed state to the end of the frame
+      tl.set({}, {}, 14.86);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["03-pipeline"] = tl;
+    })();
+  </script>
+</template>

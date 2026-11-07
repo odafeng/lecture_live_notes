@@ -1,0 +1,328 @@
+<template>
+  <style>
+    @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+    @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      container-type: size;
+      color: #1F2BE0;
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+    }
+
+    /* ---------- ground: paper + permanent graph-paper grid ---------- */
+    [class~="10-close-bg"] {
+      position: absolute;
+      inset: 0;
+      background-color: #F0EBDE;
+      background-image:
+        linear-gradient(rgba(31, 43, 224, 0.10) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(31, 43, 224, 0.10) 1px, transparent 1px);
+      background-size: 2cqw 2cqw;
+    }
+    [class~="10-close-stage"] { position: absolute; inset: 0; }
+
+    /* ---------- frame furniture ---------- */
+    [class~="10-close-hairline"] {
+      position: absolute;
+      left: 4cqw;
+      right: 4cqw;
+      height: 0.12cqw;
+      background: #1F2BE0;
+    }
+    [class~="10-close-chrome"] {
+      position: absolute;
+      top: 51.5cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 0.8333cqw;
+      letter-spacing: 0.06em;
+      line-height: 1.3;
+      color: #1F2BE0;
+      background: #F0EBDE;
+      padding: 0.15cqw 0.3cqw;
+      white-space: nowrap;
+    }
+
+    /* ---------- the canonical architecture diagram (STAGE.md §3) ---------- */
+    [id="10-close-map-outer"], [id="10-close-map-inner"] { position: absolute; inset: 0; }
+    [id="10-close-svg"] { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+
+    [class~="10-close-box"]      { fill: #F0EBDE; stroke: #1F2BE0; stroke-width: 2.304; }
+    [class~="10-close-line"]     { fill: none; stroke: #1F2BE0; stroke-width: 2.304; stroke-linejoin: miter; }
+    [class~="10-close-dashed"]   { fill: none; stroke: #1F2BE0; stroke-width: 2.304; stroke-dasharray: 11.5 7.7; }
+    [class~="10-close-t-title"]  { fill: #1F2BE0; font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif; font-weight: 600; font-size: 30px; text-anchor: middle; }
+    [class~="10-close-t-title2"] { fill: #1F2BE0; font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif; font-weight: 600; font-size: 26px; text-anchor: middle; }
+    [class~="10-close-t-sub"]    { fill: #1F2BE0; font-family: "DM Mono", "Noto Sans TC", monospace; font-size: 22px; letter-spacing: 0.04em; text-anchor: middle; }
+    [class~="10-close-t-label"]  { fill: #1F2BE0; font-family: "DM Mono", "Noto Sans TC", monospace; font-size: 27px; letter-spacing: 0.04em; }
+
+    /* ---------- seven requirement tags (pinned labels) ---------- */
+    [class~="10-close-tag"] {
+      position: absolute;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 1.40625cqw;
+      line-height: 1.2;
+      color: #F0EBDE;
+      background: #1F2BE0;
+      padding: 0.3cqw 0.55cqw;
+      white-space: nowrap;
+      will-change: transform, opacity;
+    }
+    [class~="10-close-tag-num"] { letter-spacing: 0.06em; margin-right: 0.45cqw; }
+
+    /* ---------- kicker ---------- */
+    [id="10-close-kicker"] {
+      position: absolute;
+      left: 4cqw;
+      top: 4cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 1.40625cqw;
+      line-height: 1.25;
+      letter-spacing: 0.06em;
+      color: #1F2BE0;
+      background: #F0EBDE;
+      padding: 0.2cqw 0.4cqw;
+      white-space: nowrap;
+    }
+
+    /* ---------- pixel-glitch column (left, stair-stepped) ---------- */
+    [class~="10-close-glitch"] {
+      position: absolute;
+      left: 0;
+      background-color: #F0EBDE;
+      background-image: repeating-linear-gradient(90deg, #1F2BE0 0 2px, transparent 2px 8px);
+      transform-origin: 0% 50%;
+    }
+
+    /* ---------- QR-block (top-right) ---------- */
+    [id="10-close-qr"] {
+      position: absolute;
+      left: 89.1667cqw;
+      top: 4.0625cqw;
+      width: 6.6667cqw;
+      height: 6.6667cqw;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      background: #F0EBDE;
+      box-shadow: 0 0 0 0.12cqw #F0EBDE;
+    }
+
+    /* ---------- closing line + paper panel ---------- */
+    [id="10-close-closing"] {
+      position: absolute;
+      right: 4cqw;
+      top: 19.6875cqw;
+      padding: 0.7cqw 1cqw;
+      text-align: right;
+    }
+    [id="10-close-panel"] {
+      position: absolute;
+      inset: 0;
+      background: rgba(240, 235, 222, 0.9);
+    }
+    [class~="10-close-line-row"] {
+      position: relative;
+      font-family: "Newsreader", "Noto Serif TC", serif;
+      font-weight: 400;
+      font-size: 6.2cqw;
+      line-height: 1.25;
+      letter-spacing: 0;
+      color: #1F2BE0;
+      white-space: nowrap;
+    }
+    [class~="10-close-phrase"] { display: inline-block; will-change: transform, opacity; }
+
+    /* ---------- final fade to paper ---------- */
+    [id="10-close-fade"] {
+      position: absolute;
+      inset: 0;
+      background: #F0EBDE;
+      pointer-events: none;
+    }
+  </style>
+
+  <div id="root" data-composition-id="10-close" data-width="1920" data-height="1080" data-start="0" data-duration="7.84">
+
+    <!-- ground (lowest track) -->
+    <div class="clip 10-close-bg" data-start="0" data-duration="7.84" data-track-index="0"></div>
+
+    <div class="clip 10-close-stage" data-start="0" data-duration="7.84" data-track-index="1">
+
+      <!-- hairlines -->
+      <div class="10-close-hairline" style="top: 3cqw;"></div>
+      <div class="10-close-hairline" style="top: 53.13cqw;"></div>
+
+      <!-- full-size architecture diagram + seven tags -->
+      <div id="10-close-map-outer" data-layout-allow-overlap>
+        <div id="10-close-map-inner">
+          <svg id="10-close-svg" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="10-close-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="15" markerHeight="15" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 Z" fill="#1F2BE0" />
+              </marker>
+            </defs>
+            <!-- Frame 02 shifted the canonical diagram up 40px; match it exactly -->
+            <g transform="translate(0 -40)">
+
+            <!-- 你的電腦 dashed boundary -->
+            <rect class="10-close-dashed" x="580" y="300" width="580" height="560" />
+            <text class="10-close-t-label" x="598" y="336">你的電腦</text>
+
+            <!-- 雲端 label -->
+            <text class="10-close-t-label" x="1550" y="212" text-anchor="middle" style="text-anchor: middle;">雲端</text>
+
+            <!-- connections -->
+            <path class="10-close-line" d="M440 490 H680" marker-end="url(#10-close-arrow)" />
+            <path class="10-close-line" d="M1060 450 H1200 V310 H1340" marker-start="url(#10-close-arrow)" marker-end="url(#10-close-arrow)" />
+            <path class="10-close-line" d="M1060 530 H1200 V670 H1340" marker-start="url(#10-close-arrow)" marker-end="url(#10-close-arrow)" />
+            <path class="10-close-line" d="M870 580 V680" marker-end="url(#10-close-arrow)" />
+
+            <!-- connection labels -->
+            <text class="10-close-t-label" x="560" y="474" style="text-anchor: middle;">/ws 音訊</text>
+            <text class="10-close-t-label" x="1212" y="422">音訊 → 逐字稿</text>
+            <text class="10-close-t-label" x="1212" y="582">prompt → 筆記</text>
+
+            <!-- browser -->
+            <rect class="10-close-box" x="120" y="420" width="320" height="140" />
+            <text class="10-close-t-title" x="280" y="482">瀏覽器／手機</text>
+            <text class="10-close-t-sub" x="280" y="522">PWA · 16kHz PCM</text>
+
+            <!-- server -->
+            <rect class="10-close-box" x="680" y="400" width="380" height="180" />
+            <text class="10-close-t-title" x="870" y="484">FastAPI 伺服器</text>
+            <text class="10-close-t-sub" x="870" y="524">app.py · /ws</text>
+
+            <!-- disk -->
+            <rect class="10-close-box" x="720" y="680" width="300" height="120" />
+            <text class="10-close-t-title" x="870" y="724">磁碟</text>
+            <text class="10-close-t-sub" x="870" y="758">lectures/</text>
+            <text class="10-close-t-sub" x="870" y="784">YYYYMMDD/HHMMSS/</text>
+
+            <!-- live -->
+            <rect class="10-close-box" x="1340" y="240" width="420" height="140" />
+            <text class="10-close-t-title" x="1550" y="290">Gemini Live</text>
+            <text class="10-close-t-title2" x="1550" y="327">（即時語音辨識）</text>
+            <text class="10-close-t-sub" x="1550" y="362">WebSocket</text>
+
+            <!-- flash -->
+            <rect class="10-close-box" x="1340" y="600" width="420" height="140" />
+            <text class="10-close-t-title" x="1550" y="650">Gemini Flash</text>
+            <text class="10-close-t-title2" x="1550" y="687">（筆記・章節・整併・翻譯）</text>
+            <text class="10-close-t-sub" x="1550" y="722">streamGenerateContent</text>
+            </g>
+          </svg>
+
+          <!-- seven requirement tags: final centers in px (diagram y already shifted −40), written as cqw (px / 19.2) -->
+          <div class="10-close-tag" data-fx="560"  data-fy="482" style="left: 29.1667cqw; top: 25.1042cqw;"><span class="10-close-tag-num">01</span>資料流</div>
+          <div class="10-close-tag" data-fx="1126" data-fy="310" style="left: 58.6458cqw; top: 16.1458cqw;"><span class="10-close-tag-num">02</span>連線</div>
+          <div class="10-close-tag" data-fx="1100" data-fy="592" style="left: 57.2917cqw; top: 30.8333cqw;"><span class="10-close-tag-num">03</span>失敗之後</div>
+          <div class="10-close-tag" data-fx="870"  data-fy="797" style="left: 45.3125cqw; top: 41.5104cqw;"><span class="10-close-tag-num">04</span>最終筆記</div>
+          <div class="10-close-tag" data-fx="280"  data-fy="558" style="left: 14.5833cqw; top: 29.0625cqw;"><span class="10-close-tag-num">05</span>人的修正</div>
+          <div class="10-close-tag" data-fx="1550" data-fy="738" style="left: 80.7292cqw; top: 38.4375cqw;"><span class="10-close-tag-num">06</span>翻譯</div>
+          <div class="10-close-tag" data-fx="280"  data-fy="340" style="left: 14.5833cqw; top: 17.7083cqw;"><span class="10-close-tag-num">07</span>手機</div>
+        </div>
+      </div>
+
+      <!-- pixel-glitch column: stair-stepped around the browser box -->
+      <div class="10-close-glitch" style="top: 0cqw;       height: 10.4167cqw; width: 14.0625cqw;"></div>
+      <div class="10-close-glitch" style="top: 10.4167cqw; height: 7.2917cqw;  width: 9.8958cqw;"></div>
+      <div class="10-close-glitch" style="top: 17.7083cqw; height: 16.6667cqw; width: 5cqw;"></div>
+      <div class="10-close-glitch" style="top: 34.375cqw;  height: 10.4167cqw; width: 11.9792cqw;"></div>
+      <div class="10-close-glitch" style="top: 44.7917cqw; height: 11.4583cqw; width: 16.1458cqw;"></div>
+
+      <!-- QR-block -->
+      <div id="10-close-qr"></div>
+
+      <!-- kicker -->
+      <div id="10-close-kicker">七個需求</div>
+
+      <!-- page chrome -->
+      <div class="10-close-chrome" style="left: 4cqw;">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="10-close-chrome" style="right: 4cqw;">10 / 10</div>
+
+      <!-- closing line (focal) -->
+      <div id="10-close-closing" data-layout-allow-overlap>
+        <div id="10-close-panel"></div>
+        <div class="10-close-line-row"><span class="10-close-phrase" id="10-close-p1">每一個設計，</span><span class="10-close-phrase" id="10-close-p2">都對得上一個</span></div>
+        <div class="10-close-line-row"><span class="10-close-phrase" id="10-close-p3">上課時真的會發生的問題。</span></div>
+      </div>
+
+      <!-- the film's only real exit: fade to paper -->
+      <div id="10-close-fade"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      var root = document.querySelector('[data-composition-id="10-close"]');
+      var $ = function (id) { return document.getElementById(id); };
+      var all = function (cls) { return Array.prototype.slice.call(root.querySelectorAll('[class~="' + cls + '"]')); };
+
+      // QR mosaic: hand-authored 8x8 pattern (deterministic)
+      var QR = [
+        "11100111",
+        "10100101",
+        "11100111",
+        "00011000",
+        "10110101",
+        "01100010",
+        "10101101",
+        "11100110"
+      ];
+      var qr = $("10-close-qr");
+      QR.join("").split("").forEach(function (bit) {
+        var cell = document.createElement("div");
+        cell.style.background = bit === "1" ? "#1F2BE0" : "rgba(31,43,224,0.10)";
+        qr.appendChild(cell);
+      });
+
+      var tl = gsap.timeline({ paused: true });
+
+      // Scene 1 (0.0–1.1s): full diagram, fade-in only (same position as Frame 2's end)
+      tl.fromTo($("10-close-map-outer"), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power3.out" }, 0);
+
+      // Scene 2 (1.2–1.9s): "seven requirements" — tags pin outward from the diagram centre
+      tl.fromTo($("10-close-kicker"), { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 1.2);
+
+      var CX = 940, CY = 490, START_PROGRESS = 0.3, STAGGER = 0.05, EXPAND_DUR = 0.4;
+      all("10-close-tag").forEach(function (el, i) {
+        var dx = (CX - Number(el.dataset.fx)) * (1 - START_PROGRESS);
+        var dy = (CY - Number(el.dataset.fy)) * (1 - START_PROGRESS);
+        tl.fromTo(
+          el,
+          { xPercent: -50, yPercent: -50, x: dx, y: dy, scale: 0.6, opacity: 0 },
+          { xPercent: -50, yPercent: -50, x: 0, y: 0, scale: 1, opacity: 1, duration: EXPAND_DUR, ease: "power3.out" },
+          1.2 + i * STAGGER
+        );
+      });
+
+      // Scene 3 (2.0s–end): diagram + tags dim to 35%, paper panel, closing line per phrase
+      tl.fromTo($("10-close-map-inner"), { opacity: 1 }, { opacity: 0.35, duration: 0.6, ease: "power3.out", immediateRender: false }, 2.0);
+      tl.fromTo($("10-close-panel"), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power3.out" }, 2.0);
+
+      [["10-close-p1", 2.0], ["10-close-p2", 3.0], ["10-close-p3", 3.6]].forEach(function (p) {
+        tl.fromTo($(p[0]), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, p[1]);
+      });
+
+      // 3.6s: pixel-glitch column + QR-block arrive together, then stillness
+      all("10-close-glitch").forEach(function (el, i) {
+        tl.fromTo(el, { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power3.out" }, 3.6 + i * 0.04);
+      });
+      tl.fromTo(qr, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 3.6);
+
+      // last 0.6s: the whole frame fades to paper (the film's only real ending)
+      tl.fromTo($("10-close-fade"), { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power3.inOut" }, 7.24);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["10-close"] = tl;
+    })();
+  </script>
+</template>

@@ -1,0 +1,10 @@
+{
+  "backend": "mlx-audio/MiniMax-Music3",
+  "model": "mlx-community/MiniMax-Music3-4bit",
+  "caption": "Global Metadata\nBasic Attributes: bpm is 84. key is D major. Warm minimal ambient underscore for a calm technical explainer.\nGlobal Emotional Progression: Focused and quietly optimistic from start to finish, a steady even mood with a soft settle at the end.\nSonics & Production Profile: Even and unobtrusive. Wide gentle stereo field, soft low end, no harsh transients. Dynamics stay flat so nothing pokes through a voiceover.\nVocal Details\nVocal Gender & Timbre: Instrumental. Felt piano and electric piano.\nArrangement\nInstrument Lifecycle Description: Soft felt piano single notes with long decay over warm electric piano chords, a light round synth bass holding the root, sparse glassy plucks every few bars.\nGroove & Foundation Progression: The pulse comes only from the piano and the sustained chords.",
+  "lyrics": "[intro]\n[instrumental]\n[instrumental]\n[instrumental]\n[outro]\n",
+  "duration": 150,
+  "steps": 30,
+  "seed": 7,
+  "min_frames": 3500
+}

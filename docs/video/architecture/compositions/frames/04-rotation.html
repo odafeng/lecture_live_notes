@@ -1,0 +1,452 @@
+<template>
+  <style>
+    @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+    @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      container-type: size;
+      color: #1F2BE0;
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+    }
+
+    /* ---------- ground: paper + permanent graph grid + hairlines + chrome ---------- */
+    .\30 4-rotation-ground {
+      position: absolute;
+      inset: 0;
+      background-color: #F0EBDE;
+      background-image:
+        linear-gradient(to right, rgba(31,43,224,0.10) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(31,43,224,0.10) 1px, transparent 1px);
+      background-size: 2cqw 2cqw;
+    }
+    .\30 4-rotation-hairline {
+      position: absolute;
+      left: 4.1667cqw;
+      width: 91.6667cqw;
+      height: 0.12cqw;
+      background: #1F2BE0;
+    }
+    .\30 4-rotation-chrome {
+      position: absolute;
+      top: 51.5625cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 0.677cqw;
+      letter-spacing: 0.06em;
+      color: #1F2BE0;
+      line-height: 1;
+    }
+
+    /* ---------- content layer ---------- */
+    .\30 4-rotation-layer {
+      position: absolute;
+      inset: 0;
+    }
+    .\30 4-rotation-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    /* top bar */
+    .\30 4-rotation-layertag {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 5cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 1.4cqw;
+      letter-spacing: 0.06em;
+      line-height: 1.2;
+    }
+    .\30 4-rotation-title {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 6.875cqw;
+      font-family: "Newsreader", "Noto Serif TC", serif;
+      font-weight: 400;
+      font-size: 4.6cqw;
+      line-height: 1.25;
+    }
+    .\30 4-rotation-rule {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 13.9583cqw;
+      width: 68.75cqw;
+      height: 0.12cqw;
+      background: #1F2BE0;
+      transform-origin: left center;
+    }
+
+    /* left need / design cards */
+    .\30 4-rotation-card {
+      position: absolute;
+      left: 4.1667cqw;
+      width: 28.125cqw;
+    }
+    .\30 4-rotation-label {
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 600;
+      font-size: 1.4cqw;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      line-height: 1.3;
+    }
+    .\30 4-rotation-lede {
+      margin-top: 0.7cqw;
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 400;
+      font-size: 1.6cqw;
+      line-height: 1.4;
+    }
+    .\30 4-rotation-src {
+      margin-top: 0.6cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 1.4cqw;
+      letter-spacing: 0.05em;
+      line-height: 1.35;
+      color: #5560E5;
+    }
+    .\30 4-rotation-extra {
+      margin-top: 1.1cqw;
+    }
+    .\30 4-rotation-divider {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 24.8958cqw;
+      width: 28.125cqw;
+      height: 0.06cqw;
+      background: rgba(31,43,224,0.18);
+      transform-origin: left center;
+    }
+
+    /* css-marker box around 完整 */
+    .\30 4-rotation-mark-wrap {
+      position: absolute;
+      left: 91.7708cqw;
+      top: 30.625cqw;
+      height: 1.875cqw;
+      display: inline-block;
+    }
+    .\30 4-rotation-mark-text {
+      position: relative;
+      z-index: 1;
+      display: block;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 1.4583cqw;
+      line-height: 1.875cqw;
+      letter-spacing: 0.05em;
+      color: #1F2BE0;
+    }
+    .\30 4-rotation-mark-ring {
+      position: absolute;
+      top: -0.42cqw;
+      bottom: -0.42cqw;
+      left: -0.52cqw;
+      right: -0.52cqw;
+      border: 0.16cqw solid #1F2BE0;
+      border-radius: 0;
+      z-index: 0;
+    }
+  </style>
+
+  <div id="root" data-composition-id="04-rotation" data-width="1920" data-height="1080" data-duration="16.45">
+
+    <!-- full-bleed ground -->
+    <div class="clip 04-rotation-ground" data-start="0" data-duration="16.45" data-track-index="0">
+      <div class="04-rotation-hairline" style="top: 3cqw;"></div>
+      <div class="04-rotation-hairline" style="top: 53.25cqw;"></div>
+      <div class="04-rotation-chrome" style="left: 4.1667cqw;">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="04-rotation-chrome" style="right: 4.1667cqw;">04 / 10</div>
+    </div>
+
+    <!-- content -->
+    <div class="clip 04-rotation-layer" data-start="0" data-duration="16.45" data-track-index="1">
+
+      <svg class="04-rotation-svg" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+
+        <!-- ================= MINIMAP (STAGE §4) ================= -->
+        <g id="04-rotation-minimap">
+          <rect x="1440" y="96" width="400" height="170" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+          <rect x="1452" y="88" width="70" height="18" fill="#F0EBDE" />
+          <text x="1458" y="97" font-family="'DM Mono','Noto Sans TC',monospace" font-size="14" fill="#1F2BE0" dominant-baseline="central">架構位置</text>
+
+          <!-- 你的電腦 dashed frame -->
+          <rect x="1561.2" y="132" width="127.6" height="123.2" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" stroke-dasharray="4 3" />
+
+          <!-- connections -->
+          <g id="04-rotation-mm-c-bs">
+            <line x1="1530.4" y1="173.8" x2="1577" y2="173.8" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+            <polygon points="1583.2,173.8 1577,170.6 1577,177" fill="rgba(31,43,224,0.18)" />
+          </g>
+          <g>
+            <path id="04-rotation-mm-c-sl" d="M1673,165 H1697.6 V134.2 H1722.2" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+            <polygon class="04-rotation-mm-head-sl" points="1728.4,134.2 1722.2,131 1722.2,137.4" fill="rgba(31,43,224,0.18)" />
+            <polygon class="04-rotation-mm-head-sl" points="1666.8,165 1673,161.8 1673,168.2" fill="rgba(31,43,224,0.18)" />
+          </g>
+          <g>
+            <path d="M1673,182.6 H1697.6 V213.4 H1722.2" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+            <polygon points="1728.4,213.4 1722.2,210.2 1722.2,216.6" fill="rgba(31,43,224,0.18)" />
+            <polygon points="1666.8,182.6 1673,179.4 1673,185.8" fill="rgba(31,43,224,0.18)" />
+          </g>
+          <g>
+            <line id="04-rotation-mm-c-sd" x1="1625" y1="193.6" x2="1625" y2="209.4" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+            <polygon class="04-rotation-mm-head-sd" points="1625,215.6 1621.8,209.4 1628.2,209.4" fill="rgba(31,43,224,0.18)" />
+          </g>
+
+          <!-- boxes -->
+          <rect x="1460" y="158.4" width="70.4" height="30.8" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+          <text x="1495.2" y="173.8" text-anchor="middle" dominant-baseline="central" font-family="'Hanken Grotesk','Noto Sans TC',sans-serif" font-weight="600" font-size="14" fill="rgba(31,43,224,0.18)">瀏覽器</text>
+
+          <rect id="04-rotation-mm-server" x="1583.2" y="154" width="83.6" height="39.6" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+          <text id="04-rotation-mm-server-t" x="1625" y="173.8" text-anchor="middle" dominant-baseline="central" font-family="'Hanken Grotesk','Noto Sans TC',sans-serif" font-weight="600" font-size="14" fill="rgba(31,43,224,0.18)">FastAPI</text>
+
+          <rect id="04-rotation-mm-disk" x="1592" y="215.6" width="66" height="26.4" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+          <text id="04-rotation-mm-disk-t" x="1625" y="228.8" text-anchor="middle" dominant-baseline="central" font-family="'Hanken Grotesk','Noto Sans TC',sans-serif" font-weight="600" font-size="14" fill="rgba(31,43,224,0.18)">磁碟</text>
+
+          <rect id="04-rotation-mm-live" x="1728.4" y="118.8" width="92.4" height="30.8" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+          <text id="04-rotation-mm-live-t" x="1774.6" y="134.2" text-anchor="middle" dominant-baseline="central" font-family="'Hanken Grotesk','Noto Sans TC',sans-serif" font-weight="600" font-size="14" fill="rgba(31,43,224,0.18)">Live</text>
+
+          <rect x="1728.4" y="198" width="92.4" height="30.8" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+          <text x="1774.6" y="213.4" text-anchor="middle" dominant-baseline="central" font-family="'Hanken Grotesk','Noto Sans TC',sans-serif" font-weight="600" font-size="14" fill="rgba(31,43,224,0.18)">Flash</text>
+        </g>
+
+        <!-- ================= MAIN STAGE: dual-track timeline ================= -->
+        <!-- time axis 0 → 120 min, x 980 → 1740 -->
+        <g id="04-rotation-axis">
+          <line id="04-rotation-axis-line" x1="980" y1="376" x2="1740" y2="376" stroke="#1F2BE0" stroke-width="2.3" />
+          <g stroke="#1F2BE0" stroke-width="2.3">
+            <line class="04-rotation-tick" x1="980" y1="368" x2="980" y2="384" />
+            <line class="04-rotation-tick" x1="1170" y1="368" x2="1170" y2="384" />
+            <line class="04-rotation-tick" x1="1360" y1="368" x2="1360" y2="384" />
+            <line class="04-rotation-tick" x1="1550" y1="368" x2="1550" y2="384" />
+            <line class="04-rotation-tick" x1="1740" y1="368" x2="1740" y2="384" />
+          </g>
+          <g font-family="'DM Mono','Noto Sans TC',monospace" font-size="27" fill="#1F2BE0" text-anchor="middle">
+            <text class="04-rotation-ticklabel" x="980" y="350" dominant-baseline="central">0</text>
+            <text class="04-rotation-ticklabel" x="1170" y="350" dominant-baseline="central">30</text>
+            <text class="04-rotation-ticklabel" x="1360" y="350" dominant-baseline="central">60</text>
+            <text class="04-rotation-ticklabel" x="1550" y="350" dominant-baseline="central">90</text>
+            <text class="04-rotation-ticklabel" x="1740" y="350" dominant-baseline="central">120</text>
+            <text class="04-rotation-ticklabel" x="1772" y="350" text-anchor="start" dominant-baseline="central">分鐘</text>
+          </g>
+        </g>
+
+        <!-- top track: Gemini Live 連線 -->
+        <g id="04-rotation-toptrack">
+          <text x="700" y="468" dominant-baseline="central" font-family="'Hanken Grotesk','Noto Sans TC',sans-serif" font-weight="600" font-size="28" fill="#1F2BE0">Gemini Live 連線</text>
+          <rect x="980" y="446" width="760" height="44" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+        </g>
+
+        <!-- 13 relay segments (570 s each, last 360 s); seg 0 is the first connection -->
+        <g fill="#1F2BE0">
+          <rect class="04-rotation-seg" id="04-rotation-seg0" x="982" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1042.17" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1102.33" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1162.5" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1222.67" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" id="04-rotation-seg5" x="1283.83" y="447" width="54.17" height="42" stroke="#1F2BE0" stroke-width="2" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" id="04-rotation-seg6" x="1344" y="447" width="54.17" height="42" stroke="#1F2BE0" stroke-width="2" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1403.17" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1463.33" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1523.5" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1583.67" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1643.83" y="446" width="56.17" height="44" />
+          <rect class="04-rotation-seg 04-rotation-seg-rest" x="1704" y="446" width="34" height="44" />
+        </g>
+
+        <!-- 上限 marker (after the first connection) -->
+        <g id="04-rotation-limit">
+          <line id="04-rotation-limit-line" x1="1043.33" y1="436" x2="1043.33" y2="500" stroke="#1F2BE0" stroke-width="3.07" />
+          <text id="04-rotation-limit-text" x="1043.33" y="420" text-anchor="middle" dominant-baseline="central" font-family="'DM Mono','Noto Sans TC',monospace" font-size="27" fill="#1F2BE0">上限</text>
+        </g>
+
+        <!-- 一堂課 dashed span, 0 → 120 min -->
+        <g id="04-rotation-lecture">
+          <line id="04-rotation-lecture-line" x1="980" y1="540" x2="1740" y2="540" stroke="rgba(31,43,224,0.18)" stroke-width="2.3" stroke-dasharray="10 7" />
+          <text id="04-rotation-lecture-text" x="700" y="540" dominant-baseline="central" font-family="'DM Mono','Noto Sans TC',monospace" font-size="27" fill="#5560E5">一堂課</text>
+        </g>
+
+        <!-- bottom track: lecture.wav -->
+        <g id="04-rotation-bottrack">
+          <text x="700" y="606" dominant-baseline="central" font-family="'DM Mono','Noto Sans TC',monospace" font-size="28" fill="#1F2BE0">lecture.wav</text>
+          <rect x="980" y="584" width="760" height="44" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.5" />
+        </g>
+        <rect id="04-rotation-wavbar" x="980" y="584" width="760" height="44" fill="#1F2BE0" />
+
+        <!-- ================= lower flow: 麥克風 → lecture.wav → audio_queue → Gemini Live ================= -->
+        <g id="04-rotation-st1">
+          <rect x="700" y="712" width="230" height="96" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+          <text x="815" y="760" text-anchor="middle" dominant-baseline="central" font-family="'Hanken Grotesk','Noto Sans TC',sans-serif" font-weight="600" font-size="30" fill="#1F2BE0">麥克風</text>
+        </g>
+        <g>
+          <line class="04-rotation-arrow" id="04-rotation-ar1" x1="940" y1="760" x2="987" y2="760" stroke="#1F2BE0" stroke-width="2.3" />
+          <polygon id="04-rotation-ah1" points="999,760 987,753 987,767" fill="#1F2BE0" />
+        </g>
+        <g id="04-rotation-st2">
+          <rect x="1003" y="712" width="230" height="96" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="2.3" />
+          <text x="1118" y="760" text-anchor="middle" dominant-baseline="central" font-family="'DM Mono','Noto Sans TC',monospace" font-size="28" fill="#F0EBDE">lecture.wav</text>
+        </g>
+        <g>
+          <line class="04-rotation-arrow" id="04-rotation-ar2" x1="1243" y1="760" x2="1290" y2="760" stroke="#1F2BE0" stroke-width="2.3" />
+          <polygon id="04-rotation-ah2" points="1302,760 1290,753 1290,767" fill="#1F2BE0" />
+        </g>
+        <g id="04-rotation-st3">
+          <rect x="1306" y="712" width="230" height="96" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+          <text x="1421" y="760" text-anchor="middle" dominant-baseline="central" font-family="'DM Mono','Noto Sans TC',monospace" font-size="28" fill="#1F2BE0">audio_queue</text>
+        </g>
+        <g>
+          <line class="04-rotation-arrow" id="04-rotation-ar3" x1="1546" y1="760" x2="1594" y2="760" stroke="#1F2BE0" stroke-width="2.3" />
+          <polygon id="04-rotation-ah3" points="1606,760 1594,753 1594,767" fill="#1F2BE0" />
+        </g>
+        <g id="04-rotation-st4">
+          <rect x="1610" y="712" width="230" height="96" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+          <text x="1725" y="760" text-anchor="middle" dominant-baseline="central" font-family="'Hanken Grotesk','Noto Sans TC',sans-serif" font-weight="600" font-size="28" fill="#1F2BE0">Gemini Live</text>
+        </g>
+
+        <!-- ================= failure slashes (0.16cqw cobalt crosses) ================= -->
+        <g stroke="#1F2BE0" stroke-width="3.07" stroke-linecap="butt" fill="none">
+          <line class="04-rotation-slash" id="04-rotation-x5a" x1="1281.83" y1="438" x2="1340" y2="498" />
+          <line class="04-rotation-slash" id="04-rotation-x5b" x1="1340" y1="438" x2="1281.83" y2="498" />
+          <line class="04-rotation-slash" id="04-rotation-x6a" x1="1342" y1="438" x2="1400.17" y2="498" />
+          <line class="04-rotation-slash" id="04-rotation-x6b" x1="1400.17" y1="438" x2="1342" y2="498" />
+          <line class="04-rotation-slash" id="04-rotation-x7a" x1="1620" y1="720" x2="1830" y2="800" />
+          <line class="04-rotation-slash" id="04-rotation-x7b" x1="1830" y1="720" x2="1620" y2="800" />
+        </g>
+      </svg>
+
+      <!-- top bar -->
+      <div class="04-rotation-layertag" id="04-rotation-layertag">LAYER 02 / 07</div>
+      <div class="04-rotation-title" id="04-rotation-title">連線</div>
+      <div class="04-rotation-rule" id="04-rotation-rule"></div>
+
+      <!-- need card -->
+      <div class="04-rotation-card" id="04-rotation-need" style="top: 17.1875cqw;">
+        <div class="04-rotation-label" id="04-rotation-need-label">需求</div>
+        <div class="04-rotation-lede" id="04-rotation-need-text">連線有時間上限，課卻有兩小時。</div>
+      </div>
+
+      <div class="04-rotation-divider" id="04-rotation-divider"></div>
+
+      <!-- design card -->
+      <div class="04-rotation-card" id="04-rotation-design" style="top: 26.3542cqw;">
+        <div class="04-rotation-label" id="04-rotation-design-label">設計</div>
+        <div class="04-rotation-lede" id="04-rotation-design-text">每 570 秒主動換一條新連線</div>
+        <div class="04-rotation-src" id="04-rotation-design-src">SESSION_ROTATE_SECONDS = 570<br />ADR 0003</div>
+        <div class="04-rotation-lede 04-rotation-extra" id="04-rotation-design-extra">聲音先落地，再送辨識</div>
+      </div>
+
+      <!-- css-marker: 完整 boxed beside the lecture.wav bar -->
+      <span class="04-rotation-mark-wrap">
+        <span class="04-rotation-mark-text" id="04-rotation-mark-text">完整</span>
+        <span class="04-rotation-mark-ring" id="04-rotation-mark-ring"></span>
+      </span>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      window.__timelines = window.__timelines || {};
+      var $ = function (id) { return document.getElementById("04-rotation-" + id); };
+      var $$ = function (cls) { return Array.prototype.slice.call(document.getElementsByClassName("04-rotation-" + cls)); };
+
+      var INK = "#1F2BE0";
+      var PAPER = "#F0EBDE";
+      var E = "power3.out";
+      var tl = gsap.timeline({ paused: true });
+
+      // svg-path-draw setup: measured dash lengths for arrows + failure slashes
+      $$("arrow").concat($$("slash")).forEach(function (el) {
+        var len = el.getTotalLength();
+        el.style.strokeDasharray = len + "";
+        el.style.strokeDashoffset = len + "";
+      });
+
+      // ---------- Scene 1 (0.0–2.0): top bar + minimap settle, minimap lights, axis fades in ----------
+      tl.fromTo($("minimap"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 0);
+      tl.fromTo($("layertag"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 0.05);
+      tl.fromTo($("title"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 0.2);
+      tl.fromTo($("rule"), { scaleX: 0 }, { scaleX: 1, duration: 0.9, ease: E }, 0.3);
+
+      // time axis (hero area visible early)
+      tl.fromTo($("axis-line"), { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 1.0, ease: E }, 0.4);
+      tl.fromTo($$("tick"), { opacity: 0 }, { opacity: 1, duration: 0.4, ease: E, stagger: 0.12 }, 0.6);
+      tl.fromTo($$("ticklabel"), { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.5, ease: E, stagger: 0.1 }, 0.7);
+
+      // minimap: server, live, disk + server⇄live, server→disk light up after the layer name
+      [["server", 1.0], ["live", 1.15], ["disk", 1.3]].forEach(function (b) {
+        tl.to($("mm-" + b[0]), { fill: INK, stroke: INK, duration: 0.4, ease: E }, b[1]);
+        tl.to($("mm-" + b[0] + "-t"), { fill: PAPER, duration: 0.4, ease: E }, b[1]);
+      });
+      tl.to($("mm-c-sl"), { stroke: INK, duration: 0.4, ease: E }, 1.15);
+      tl.to($$("mm-head-sl"), { fill: INK, duration: 0.4, ease: E }, 1.15);
+      tl.to($("mm-c-sd"), { stroke: INK, duration: 0.4, ease: E }, 1.3);
+      tl.to($$("mm-head-sd"), { fill: INK, duration: 0.4, ease: E }, 1.3);
+
+      // ---------- Scene 2 (2.1–4.8): need card; first connection grows and hits 上限 ----------
+      tl.fromTo($("need-label"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 2.1);
+      tl.fromTo($("need-text"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 2.25);
+      tl.fromTo($("toptrack"), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: E }, 2.3);
+      tl.fromTo($("limit-line"), { scaleY: 0, transformOrigin: "50% 0%" }, { scaleY: 1, duration: 0.5, ease: E }, 2.6);
+      tl.fromTo($("limit-text"), { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 2.65);
+      tl.fromTo($("seg0"), { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 1.0, ease: E }, 2.95);
+
+      // ---------- Scene 3 (4.9–6.0): the lecture is two hours ----------
+      tl.fromTo($("lecture-line"), { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.9, ease: E }, 4.9);
+      tl.fromTo($("lecture-text"), { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 4.95);
+
+      // ---------- Scene 4 (6.1–8.6): design card; 13 relay segments stagger in ----------
+      tl.fromTo($("divider"), { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: E }, 6.05);
+      tl.fromTo($("design-label"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 6.1);
+      tl.fromTo($("design-text"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 6.25);
+      tl.fromTo($("design-src"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 6.5);
+      tl.to($("limit"), { opacity: 0.35, duration: 0.5, ease: E }, 6.4);
+      tl.fromTo($$("seg-rest"), { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.45, ease: E, stagger: 0.1 }, 6.6);
+
+      // ---------- Scene 5 (8.7–9.6): lecture.wav — one unbroken bar ----------
+      tl.fromTo($("bottrack"), { opacity: 0 }, { opacity: 1, duration: 0.4, ease: E }, 8.6);
+      tl.fromTo($("wavbar"), { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.85, ease: E }, 8.75);
+
+      // ---------- Scene 6 (9.7–12.5): write to file first, then send to recognition ----------
+      tl.fromTo($("st1"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 9.7);
+      tl.to($("ar1"), { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 9.85);
+      tl.fromTo($("ah1"), { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, 10.1);
+      tl.fromTo($("st2"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 10.0);
+      tl.fromTo($("design-extra"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 10.25);
+      tl.to($("ar2"), { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 10.85);
+      tl.fromTo($("ah2"), { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, 11.1);
+      tl.fromTo($("st3"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 11.0);
+      tl.to($("ar3"), { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 11.2);
+      tl.fromTo($("ah3"), { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, 11.45);
+      tl.fromTo($("st4"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 11.4);
+
+      // ---------- Scene 7 (12.6–15.95): recognition drops; the recording stays whole ----------
+      tl.to([$("seg5"), $("seg6")], { fill: PAPER, duration: 0.35, ease: E }, 12.6);
+      tl.to($("x5a"), { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 12.7);
+      tl.to($("x5b"), { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 12.92);
+      tl.to($("x6a"), { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 12.82);
+      tl.to($("x6b"), { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, 13.04);
+      tl.to($("x7a"), { strokeDashoffset: 0, duration: 0.35, ease: "power2.out" }, 13.0);
+      tl.to($("x7b"), { strokeDashoffset: 0, duration: 0.35, ease: "power2.out" }, 13.25);
+
+      tl.fromTo($("mark-text"), { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 14.0);
+      tl.fromTo($("mark-ring"), { opacity: 0, scale: 0.6, rotation: -4 }, { opacity: 1, scale: 1, rotation: -2, duration: 0.6, ease: E }, 14.2);
+
+      // hold to the end of the frame
+      tl.to({}, { duration: 0.01 }, 15.94);
+
+      window.__timelines["04-rotation"] = tl;
+    })();
+  </script>
+</template>

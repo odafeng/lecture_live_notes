@@ -1,0 +1,413 @@
+<template>
+  <style>
+    @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+    @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      container-type: size;
+      --u: calc(100cqw / 1920);
+      --paper: #F0EBDE;
+      --ink: #1F2BE0;
+      --grid: rgba(31, 43, 224, 0.10);
+      --faint: rgba(31, 43, 224, 0.18);
+      --display: "Newsreader", "Noto Serif TC", serif;
+      --body: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      --mono: "DM Mono", "Noto Sans TC", monospace;
+      color: var(--ink);
+    }
+    #root * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ---------- ground + furniture ---------- */
+    .\30 5-retries-ground {
+      position: absolute; inset: 0; z-index: 0;
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(to right, var(--grid) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+      background-size: 2cqw 2cqw;
+    }
+    .\30 5-retries-layer-wrap { position: absolute; inset: 0; z-index: 1; }
+    .\30 5-retries-hair {
+      position: absolute; left: calc(80 * var(--u)); width: calc(1760 * var(--u));
+      height: 0.12cqw; background: var(--ink);
+    }
+    .\30 5-retries-hair-top { top: calc(56 * var(--u)); }
+    .\30 5-retries-hair-bot { top: calc(1022 * var(--u)); }
+    .\30 5-retries-chrome {
+      position: absolute; top: calc(992 * var(--u));
+      font-family: var(--mono); font-size: 0.68cqw; letter-spacing: 0.06em; line-height: 1;
+    }
+    .\30 5-retries-chrome-l { left: calc(80 * var(--u)); }
+    .\30 5-retries-chrome-r { right: calc(80 * var(--u)); }
+
+    /* ---------- top bar ---------- */
+    .\30 5-retries-layer {
+      position: absolute; left: calc(80 * var(--u)); top: calc(92 * var(--u));
+      font-family: var(--mono); font-size: 1.2cqw; letter-spacing: 0.08em; line-height: 1;
+    }
+    .\30 5-retries-title {
+      position: absolute; left: calc(80 * var(--u)); top: calc(126 * var(--u));
+      font-family: var(--display); font-weight: 400; font-size: 4.6cqw; line-height: 1.25;
+    }
+    .\30 5-retries-toprule {
+      position: absolute; left: calc(80 * var(--u)); top: calc(262 * var(--u));
+      width: calc(1320 * var(--u)); height: 0.12cqw; background: var(--ink);
+      transform-origin: left center;
+    }
+
+    /* ---------- minimap ---------- */
+    .\30 5-retries-map {
+      position: absolute; left: calc(1440 * var(--u)); top: calc(96 * var(--u));
+      width: calc(400 * var(--u)); height: calc(170 * var(--u));
+      background: var(--paper); border: 0.12cqw solid var(--ink);
+    }
+    .\30 5-retries-map svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .\30 5-retries-map-legend {
+      position: absolute; left: calc(14 * var(--u)); top: calc(-11 * var(--u));
+      padding: 0 calc(6 * var(--u)); background: var(--paper);
+      font-family: var(--mono); font-size: 1cqw; letter-spacing: 0.06em; line-height: 1.1;
+    }
+    .\30 5-retries-map text {
+      font-family: var(--body); font-weight: 600; font-size: 60px;
+      text-anchor: middle; dominant-baseline: central;
+    }
+
+    /* ---------- left column: need / design ---------- */
+    .\30 5-retries-tag {
+      position: absolute; left: calc(80 * var(--u));
+      font-family: var(--body); font-weight: 600; font-size: 1.15cqw;
+      letter-spacing: 0.18em; line-height: 1.25;
+    }
+    .\30 5-retries-lede {
+      position: absolute; left: calc(80 * var(--u)); width: calc(540 * var(--u));
+      font-family: var(--body); font-weight: 400; font-size: 1.75cqw; line-height: 1.45;
+    }
+    .\30 5-retries-src {
+      position: absolute; left: calc(80 * var(--u));
+      font-family: var(--mono); font-size: 1.4cqw; letter-spacing: 0.04em; line-height: 1.3;
+    }
+    .\30 5-retries-carddiv {
+      position: absolute; left: calc(80 * var(--u)); top: calc(522 * var(--u));
+      width: calc(540 * var(--u)); height: 0.06cqw; background: var(--faint);
+      transform-origin: left center;
+    }
+
+    /* ---------- main stage: retry ledger ---------- */
+    .\30 5-retries-headlabel {
+      position: absolute; left: calc(700 * var(--u)); top: calc(322 * var(--u));
+      font-family: var(--mono); font-size: 1.4cqw; letter-spacing: 0.04em; line-height: 1.2;
+    }
+    .\30 5-retries-tick {
+      position: absolute; top: calc(330 * var(--u));
+      font-family: var(--mono); font-size: 1.1cqw; letter-spacing: 0.04em; line-height: 1;
+      transform: translateX(-50%);
+    }
+    .\30 5-retries-headrule {
+      position: absolute; left: calc(700 * var(--u)); top: calc(364 * var(--u));
+      width: calc(1140 * var(--u)); height: 0.12cqw; background: var(--ink);
+      transform-origin: left center;
+    }
+    .\30 5-retries-origin {
+      position: absolute; left: calc(1109 * var(--u)); top: calc(366 * var(--u));
+      width: 0.12cqw; height: calc(504 * var(--u)); background: var(--ink);
+      transform-origin: center top;
+    }
+    .\30 5-retries-decade {
+      position: absolute; top: calc(366 * var(--u));
+      width: 1px; height: calc(504 * var(--u)); background: var(--faint);
+    }
+    .\30 5-retries-rowdiv {
+      position: absolute; left: calc(700 * var(--u)); width: calc(1140 * var(--u));
+      height: 0.06cqw; background: var(--faint); transform-origin: left center;
+    }
+    .\30 5-retries-name {
+      position: absolute; left: calc(700 * var(--u));
+      font-family: var(--body); font-weight: 600; font-size: 1.9cqw; line-height: 1.2;
+    }
+    .\30 5-retries-const {
+      position: absolute; left: calc(700 * var(--u));
+      font-family: var(--mono); font-size: 1.4cqw; letter-spacing: 0.02em; line-height: 1.2;
+    }
+    .\30 5-retries-bar {
+      position: absolute; left: calc(1110 * var(--u));
+      width: calc(627 * var(--u)); height: calc(30 * var(--u));
+    }
+    .\30 5-retries-track, .\30 5-retries-fill {
+      position: absolute; left: 0; top: 0; height: 100%;
+    }
+    .\30 5-retries-track {
+      width: 100%;
+      background: repeating-linear-gradient(90deg, var(--grid) 0 calc(7 * var(--u)), transparent calc(7 * var(--u)) calc(10 * var(--u)));
+    }
+    .\30 5-retries-fill {
+      background: repeating-linear-gradient(90deg, var(--ink) 0 calc(7 * var(--u)), transparent calc(7 * var(--u)) calc(10 * var(--u)));
+    }
+    .\30 5-retries-mover { position: absolute; left: 0; top: 0; height: 100%; }
+    .\30 5-retries-val {
+      position: absolute; left: calc(100% + 8 * var(--u)); top: 0; height: 100%;
+      display: flex; align-items: center; white-space: nowrap;
+      padding: 0 calc(6 * var(--u)); background: var(--paper);
+      font-family: var(--mono); font-size: 1.6cqw; line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .\30 5-retries-val-big { font-size: 2.3cqw; }
+    .\30 5-retries-num { display: inline-block; transform-origin: left center; }
+    .\30 5-retries-tail {
+      position: absolute; left: calc(1392 * var(--u)); top: calc(470 * var(--u));
+      height: calc(30 * var(--u)); display: flex; align-items: center; gap: calc(10 * var(--u));
+      padding: 0 calc(8 * var(--u)); background: var(--paper);
+      font-family: var(--body); font-weight: 400; font-size: 1.4cqw; line-height: 1; white-space: nowrap;
+    }
+    .\30 5-retries-tail svg { width: calc(22 * var(--u)); height: calc(22 * var(--u)); }
+  </style>
+
+  <div id="root" data-composition-id="05-retries" data-start="0" data-duration="16.78" data-width="1920" data-height="1080">
+
+    <!-- full-bleed ground: paper + permanent graph grid -->
+    <div class="clip 05-retries-ground" data-start="0" data-duration="16.78" data-track-index="0"></div>
+
+    <div class="05-retries-layer-wrap">
+      <!-- furniture -->
+      <div class="05-retries-hair 05-retries-hair-top"></div>
+      <div class="05-retries-hair 05-retries-hair-bot"></div>
+      <div class="05-retries-chrome 05-retries-chrome-l">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="05-retries-chrome 05-retries-chrome-r">05 / 10</div>
+
+      <!-- top bar -->
+      <div class="05-retries-layer">LAYER 03 / 07</div>
+      <div class="05-retries-title">失敗之後</div>
+      <div class="05-retries-toprule"></div>
+
+      <!-- minimap: server, flash and server⇄flash lit -->
+      <div class="05-retries-map" data-layout-allow-overlap>
+        <div class="05-retries-map-legend">架構位置</div>
+        <svg viewBox="0 0 400 170" preserveAspectRatio="xMidYMid meet">
+          <g transform="translate(19.6 12.4) scale(0.22) translate(-120 -200)">
+            <g fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="7">
+              <rect x="580" y="300" width="580" height="560" fill="none" stroke-dasharray="52 30"></rect>
+              <rect x="120" y="420" width="320" height="140"></rect>
+              <rect x="680" y="400" width="380" height="180"></rect>
+              <rect x="720" y="680" width="300" height="120"></rect>
+              <rect x="1340" y="240" width="420" height="140"></rect>
+              <rect x="1340" y="600" width="420" height="140"></rect>
+              <line x1="440" y1="490" x2="650" y2="490"></line>
+              <polyline points="1090,450 1200,450 1200,310 1310,310" fill="none"></polyline>
+              <polyline points="1090,530 1200,530 1200,670 1310,670" fill="none"></polyline>
+              <line x1="870" y1="580" x2="870" y2="650"></line>
+            </g>
+            <g fill="rgba(31,43,224,0.18)">
+              <polygon points="680,490 650,475 650,505"></polygon>
+              <polygon points="1340,310 1310,295 1310,325"></polygon>
+              <polygon points="1060,450 1090,435 1090,465"></polygon>
+              <polygon points="1340,670 1310,655 1310,685"></polygon>
+              <polygon points="1060,530 1090,515 1090,545"></polygon>
+              <polygon points="870,680 855,650 885,650"></polygon>
+              <text x="280" y="490">瀏覽器</text>
+              <text x="870" y="490">FastAPI</text>
+              <text x="870" y="740">磁碟</text>
+              <text x="1550" y="310">Live</text>
+              <text x="1550" y="670">Flash</text>
+            </g>
+            <g class="05-retries-lit">
+              <rect x="680" y="400" width="380" height="180" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="7"></rect>
+              <rect x="1340" y="600" width="420" height="140" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="7"></rect>
+              <polyline points="1090,530 1200,530 1200,670 1310,670" fill="none" stroke="#1F2BE0" stroke-width="7"></polyline>
+              <polygon points="1340,670 1310,655 1310,685" fill="#1F2BE0"></polygon>
+              <polygon points="1060,530 1090,515 1090,545" fill="#1F2BE0"></polygon>
+              <text x="870" y="490" fill="#F0EBDE">FastAPI</text>
+              <text x="1550" y="670" fill="#F0EBDE">Flash</text>
+            </g>
+          </g>
+        </svg>
+      </div>
+
+      <!-- left column: need card -->
+      <div class="05-retries-tag 05-retries-need-tag" style="top: calc(330 * var(--u));">需求</div>
+      <div class="05-retries-lede 05-retries-need-text" style="top: calc(368 * var(--u));">網路一定會壞，<br>但每種失敗的代價不同。</div>
+      <div class="05-retries-carddiv"></div>
+      <!-- left column: design card -->
+      <div class="05-retries-tag 05-retries-design-tag" style="top: calc(558 * var(--u));">設計</div>
+      <div class="05-retries-lede 05-retries-design-text" style="top: calc(596 * var(--u));">依失敗代價，分三層重試</div>
+      <div class="05-retries-src 05-retries-design-src" style="top: calc(664 * var(--u));">ADR 0001 · 串流讀取</div>
+
+      <!-- main stage: ledger header + log axis -->
+      <div class="05-retries-headlabel">等待間隔 · log 尺度</div>
+      <div class="05-retries-tick" style="left: calc(1110 * var(--u));">1s</div>
+      <div class="05-retries-tick" style="left: calc(1320 * var(--u));">10s</div>
+      <div class="05-retries-tick" style="left: calc(1530 * var(--u));">100s</div>
+      <div class="05-retries-tick" style="left: calc(1740 * var(--u));">1000s</div>
+      <div class="05-retries-decade" style="left: calc(1320 * var(--u));"></div>
+      <div class="05-retries-decade" style="left: calc(1530 * var(--u));"></div>
+      <div class="05-retries-decade" style="left: calc(1740 * var(--u));"></div>
+      <div class="05-retries-headrule"></div>
+      <div class="05-retries-origin"></div>
+
+      <!-- row 1: LIVE_RETRY_DELAYS (2, 4, 8) -->
+      <div class="05-retries-r1">
+        <div class="05-retries-name" style="top: calc(386 * var(--u));">逐段筆記</div>
+        <div class="05-retries-const" style="top: calc(434 * var(--u));">LIVE_RETRY_DELAYS</div>
+        <div class="05-retries-bar" style="top: calc(386 * var(--u));" data-t="7.0" data-d="0.8" data-v="2">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(67 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(67 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">2</span><span class="05-retries-suf">s</span></div></div>
+        </div>
+        <div class="05-retries-bar" style="top: calc(428 * var(--u));" data-t="7.6" data-d="0.8" data-v="4">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(127 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(127 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">4</span><span class="05-retries-suf">s</span></div></div>
+        </div>
+        <div class="05-retries-bar" style="top: calc(470 * var(--u));" data-t="8.0" data-d="0.8" data-v="8">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(187 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(187 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">8</span><span class="05-retries-suf">s</span></div></div>
+        </div>
+        <div class="05-retries-rowdiv" style="top: calc(520 * var(--u));"></div>
+      </div>
+      <div class="05-retries-tail">
+        <svg viewBox="0 0 22 22"><rect x="1" y="1" width="20" height="20" fill="none" stroke="#1F2BE0" stroke-width="2"></rect><line x1="5" y1="5" x2="17" y2="17" stroke="#1F2BE0" stroke-width="3"></line><line x1="17" y1="5" x2="5" y2="17" stroke="#1F2BE0" stroke-width="3"></line></svg>
+        <span>放棄 · 逐字稿還在</span>
+      </div>
+
+      <!-- row 2: FINAL_RETRY_DELAYS (5, 15, 45, 120) -->
+      <div class="05-retries-r2">
+        <div class="05-retries-name" style="top: calc(540 * var(--u));">最終整併</div>
+        <div class="05-retries-const" style="top: calc(588 * var(--u));">FINAL_RETRY_DELAYS</div>
+        <div class="05-retries-bar" style="top: calc(540 * var(--u));" data-t="9.0" data-d="0.8" data-v="5">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(147 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(147 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">5</span><span class="05-retries-suf">s</span></div></div>
+        </div>
+        <div class="05-retries-bar" style="top: calc(582 * var(--u));" data-t="9.35" data-d="0.85" data-v="15">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(247 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(247 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">15</span><span class="05-retries-suf">s</span></div></div>
+        </div>
+        <div class="05-retries-bar" style="top: calc(624 * var(--u));" data-t="9.7" data-d="0.9" data-v="45">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(347 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(347 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">45</span><span class="05-retries-suf">s</span></div></div>
+        </div>
+        <div class="05-retries-bar" style="top: calc(666 * var(--u));" data-t="9.9" data-d="1.0" data-v="120" data-s0="0.4">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(437 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(437 * var(--u));"><div class="05-retries-val 05-retries-val-big"><span class="05-retries-num">120</span><span class="05-retries-suf">s</span></div></div>
+        </div>
+        <div class="05-retries-rowdiv" style="top: calc(716 * var(--u));"></div>
+      </div>
+
+      <!-- row 3: BACKGROUND_RETRY_DELAYS (60, 300, 900 s) -->
+      <div class="05-retries-r3">
+        <div class="05-retries-name" style="top: calc(736 * var(--u));">背景再試</div>
+        <div class="05-retries-const" style="top: calc(784 * var(--u));">BACKGROUND_RETRY_DELAYS</div>
+        <div class="05-retries-bar" style="top: calc(736 * var(--u));" data-t="13.1" data-d="0.9" data-v="1">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(377 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(377 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">1</span><span class="05-retries-suf">&nbsp;分</span></div></div>
+        </div>
+        <div class="05-retries-bar" style="top: calc(778 * var(--u));" data-t="13.4" data-d="0.9" data-v="5">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(517 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(517 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">5</span><span class="05-retries-suf">&nbsp;分</span></div></div>
+        </div>
+        <div class="05-retries-bar" style="top: calc(820 * var(--u));" data-t="14.0" data-d="0.95" data-v="15">
+          <div class="05-retries-track"></div>
+          <div class="05-retries-fill" style="width: calc(617 * var(--u));"></div>
+          <div class="05-retries-mover" style="width: calc(617 * var(--u));"><div class="05-retries-val"><span class="05-retries-num">15</span><span class="05-retries-suf">&nbsp;分</span></div></div>
+        </div>
+        <div class="05-retries-rowdiv" style="top: calc(870 * var(--u));"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      var ID = "05-retries";
+      var P = ID + "-";
+      var scope = document.querySelector('[data-composition-id="' + ID + '"]') || document;
+      function c(n) { return "." + CSS.escape(P + n); }
+      function all(sel, el) { return Array.prototype.slice.call((el || scope).querySelectorAll(sel)); }
+      function one(sel, el) { return (el || scope).querySelector(sel); }
+
+      var E = "power3.out";
+      var tl = gsap.timeline({ paused: true });
+
+      // Scene 1 (0.0–2.4): top bar + minimap settle, relevant boxes light, ledger header draws
+      tl.fromTo(one(c("map")), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 0);
+      tl.fromTo(one(c("layer")), { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 0.1);
+      tl.fromTo(one(c("toprule")), { scaleX: 0 }, { scaleX: 1, duration: 0.9, ease: E }, 0.15);
+      tl.fromTo(one(c("title")), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 0.25);
+      tl.fromTo(one(c("lit")), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: E }, 1.0);
+
+      tl.fromTo(one(c("headrule")), { scaleX: 0 }, { scaleX: 1, duration: 1.0, ease: E }, 0.45);
+      tl.fromTo(one(c("origin")), { scaleY: 0 }, { scaleY: 1, duration: 1.0, ease: E }, 0.8);
+      tl.fromTo(one(c("headlabel")), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 1.2);
+      tl.fromTo(all(c("tick")), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: E, stagger: 0.08 }, 1.4);
+      tl.fromTo(all(c("decade")), { opacity: 0 }, { opacity: 1, duration: 0.6, ease: E, stagger: 0.08 }, 1.5);
+
+      // Scene 2 (2.5–5.1): need card
+      tl.fromTo(one(c("need-tag")), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 2.5);
+      tl.fromTo(one(c("need-text")), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 2.65);
+
+      // Row heads (name + constant + empty cell tracks + divider)
+      function rowIn(n, t) {
+        var row = one(c("r" + n));
+        tl.fromTo(one(c("rowdiv"), row), { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: E }, t);
+        tl.fromTo(one(c("name"), row), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, t);
+        tl.fromTo(one(c("const"), row), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, t + 0.12);
+        tl.fromTo(all(c("track"), row), { opacity: 0 }, { opacity: 1, duration: 0.5, ease: E, stagger: 0.07 }, t + 0.1);
+      }
+
+      // Bars: pixel-cell fill reveals by clip (cells stay crisp), value label rides the tip,
+      // number counts up (snapped innerText) while scaling to its final size (counting-dynamic-scale), suffix after the count.
+      function barIn(bar) {
+        var t = parseFloat(bar.getAttribute("data-t"));
+        var d = parseFloat(bar.getAttribute("data-d"));
+        var v = parseFloat(bar.getAttribute("data-v"));
+        var s0 = parseFloat(bar.getAttribute("data-s0") || "0.5");
+        var fill = one(c("fill"), bar);
+        var mover = one(c("mover"), bar);
+        var val = one(c("val"), bar);
+        var num = one(c("num"), bar);
+        var suf = one(c("suf"), bar);
+        tl.fromTo(fill, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: d, ease: E }, t);
+        tl.fromTo(mover, { xPercent: -100 }, { xPercent: 0, duration: d, ease: E }, t);
+        tl.fromTo(val, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: E }, t);
+        // property tween (not onUpdate): the renderer seeks with events suppressed
+        tl.fromTo(num, { innerText: 0 }, { innerText: v, snap: { innerText: 1 }, duration: d, ease: E }, t);
+        tl.fromTo(num, { scale: s0 }, { scale: 1, duration: d, ease: E }, t);
+        tl.fromTo(suf, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: E }, t + d);
+      }
+
+      // Scene 3 (5.2–8.8): row 1, bars on "兩秒、四秒、八秒", tail note at 8.4
+      rowIn(1, 5.2);
+      all(c("bar"), one(c("r1"))).forEach(barIn);
+      tl.fromTo(one(c("tail")), { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 8.4);
+
+      // Scene 4 (8.9–11.4): design card + row 2, 120s lands at 10.9
+      tl.fromTo(one(c("carddiv")), { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: E }, 8.85);
+      tl.fromTo(one(c("design-tag")), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 8.9);
+      tl.fromTo(one(c("design-text")), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 9.0);
+      tl.fromTo(one(c("design-src")), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 9.2);
+      rowIn(2, 8.95);
+      all(c("bar"), one(c("r2"))).forEach(barIn);
+
+      // Scene 5 (11.5–16.28): row 3, bars on "一分鐘、五分鐘、十五分鐘", then hold
+      rowIn(3, 11.5);
+      all(c("bar"), one(c("r3"))).forEach(barIn);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["05-retries"] = tl;
+    })();
+  </script>
+</template>

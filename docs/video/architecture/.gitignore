@@ -1,0 +1,14 @@
+# Generated media — regenerate with tools/build_voice.py, tools/pad_voice.py, tools/build_bgm.py
+assets/voice/
+assets/audio/*.mp3
+assets/audio/*.wav
+renders/
+.hyperframes/artifacts/
+node_modules/
+.hyperframes/frame-packets/
+.hyperframes/cue_times.txt
+.thumbnails/
+.waveform-cache/
+.hyperframes/preview/
+.hyperframes/video-state.json
+.hyperframes/history-id

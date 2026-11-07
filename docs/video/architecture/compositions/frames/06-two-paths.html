@@ -1,0 +1,473 @@
+<template>
+  <style>
+    @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+    @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      color: #1F2BE0;
+    }
+
+    /* full-bleed ground: paper + permanent graph-paper grid + hairlines */
+    .\30 6-two-paths-ground {
+      position: absolute;
+      inset: 0;
+      container-type: size;
+      background-color: #F0EBDE;
+      background-image:
+        linear-gradient(to right, rgba(31,43,224,0.10) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(31,43,224,0.10) 1px, transparent 1px);
+      background-size: 2cqw 2cqw;
+    }
+
+    /* content stage: the size container every unit resolves against */
+    .\30 6-two-paths-stage {
+      --u: calc(100cqw / 1920);
+      position: absolute;
+      inset: 0;
+      container-type: size;
+    }
+    .\30 6-two-paths-stage > * { position: absolute; }
+
+    .\30 6-two-paths-hair {
+      left: calc(77 * var(--u));
+      width: calc(1766 * var(--u));
+      height: 0.12cqw;
+      background: #1F2BE0;
+    }
+
+    .\30 6-two-paths-chrome {
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: calc(13 * var(--u));
+      letter-spacing: 0.06em;
+      top: calc(994 * var(--u));
+      line-height: 1;
+    }
+
+    .\30 6-two-paths-svg {
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    /* top bar */
+    .\30 6-two-paths-layer {
+      left: calc(80 * var(--u));
+      top: calc(100 * var(--u));
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: calc(22 * var(--u));
+      letter-spacing: 0.08em;
+      line-height: 1;
+    }
+    .\30 6-two-paths-title {
+      left: calc(80 * var(--u));
+      top: calc(128 * var(--u));
+      font-family: "Newsreader", "Noto Serif TC", serif;
+      font-weight: 400;
+      font-size: 4.6cqw;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .\30 6-two-paths-rule {
+      left: calc(80 * var(--u));
+      top: calc(256 * var(--u));
+      width: calc(1320 * var(--u));
+      height: 0.12cqw;
+      background: #1F2BE0;
+      transform-origin: 0% 50%;
+    }
+
+    /* minimap label */
+    .\30 6-two-paths-mmlabel {
+      left: calc(1440 * var(--u));
+      top: calc(70 * var(--u));
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: calc(16 * var(--u));
+      letter-spacing: 0.06em;
+      line-height: 1;
+    }
+
+    /* left column cards */
+    .\30 6-two-paths-card {
+      left: calc(80 * var(--u));
+      width: calc(540 * var(--u));
+      box-sizing: border-box;
+      padding: calc(24 * var(--u)) calc(26 * var(--u));
+      border: 0.12cqw solid #1F2BE0;
+      background: #F0EBDE;
+    }
+    .\30 6-two-paths-need { top: calc(330 * var(--u)); }
+    .\30 6-two-paths-design { top: calc(560 * var(--u)); }
+    .\30 6-two-paths-kicker {
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 600;
+      font-size: calc(20 * var(--u));
+      letter-spacing: 0.18em;
+      line-height: 1.3;
+    }
+    .\30 6-two-paths-lede {
+      margin-top: calc(14 * var(--u));
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 500;
+      font-size: calc(30 * var(--u));
+      line-height: 1.35;
+    }
+    .\30 6-two-paths-src {
+      margin-top: calc(14 * var(--u));
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: calc(26 * var(--u));
+      letter-spacing: 0.04em;
+      line-height: 1.3;
+    }
+    .\30 6-two-paths-divider {
+      left: calc(80 * var(--u));
+      top: calc(518 * var(--u));
+      width: calc(540 * var(--u));
+      height: calc(1.5 * var(--u));
+      background: rgba(31,43,224,0.18);
+    }
+
+    /* main stage */
+    .\30 6-two-paths-mono {
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .\30 6-two-paths-body {
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 600;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .\30 6-two-paths-file {
+      left: calc(720 * var(--u));
+      top: calc(340 * var(--u));
+      width: calc(430 * var(--u));
+      height: calc(80 * var(--u));
+      box-sizing: border-box;
+      border: 0.12cqw solid #1F2BE0;
+      background: #F0EBDE;
+      display: flex;
+      align-items: center;
+      gap: calc(16 * var(--u));
+      padding: 0 calc(20 * var(--u));
+      font-size: calc(28 * var(--u));
+    }
+    .\30 6-two-paths-file svg {
+      width: calc(34 * var(--u));
+      height: calc(30 * var(--u));
+      flex: none;
+    }
+    .\30 6-two-paths-rerun {
+      left: calc(1272 * var(--u));
+      top: calc(363 * var(--u));
+      font-size: calc(26 * var(--u));
+    }
+    .\30 6-two-paths-uplabel {
+      left: calc(740 * var(--u));
+      top: calc(454 * var(--u));
+      font-size: calc(28 * var(--u));
+    }
+    .\30 6-two-paths-lowlabel {
+      left: calc(740 * var(--u));
+      top: calc(790 * var(--u));
+      font-size: calc(28 * var(--u));
+    }
+    .\30 6-two-paths-locklabel {
+      left: calc(1250 * var(--u));
+      top: calc(716 * var(--u));
+      width: calc(240 * var(--u));
+      text-align: center;
+      font-size: calc(26 * var(--u));
+    }
+    .\30 6-two-paths-publabel {
+      left: calc(1500 * var(--u));
+      top: calc(550 * var(--u));
+      font-size: calc(26 * var(--u));
+    }
+    .\30 6-two-paths-result {
+      left: calc(1500 * var(--u));
+      top: calc(590 * var(--u));
+      width: calc(330 * var(--u));
+      height: calc(120 * var(--u));
+      box-sizing: border-box;
+      border: 0.12cqw solid #1F2BE0;
+      background: #F0EBDE;
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      font-size: calc(28 * var(--u));
+    }
+    .\30 6-two-paths-okline { margin-top: calc(14 * var(--u)); }
+    .\30 6-two-paths-mark {
+      position: relative;
+      display: inline-block;
+    }
+    .\30 6-two-paths-marktext { position: relative; z-index: 1; }
+    .\30 6-two-paths-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 114%;
+      height: 150%;
+      box-sizing: border-box;
+      border: calc(3 * var(--u)) solid #1F2BE0;
+      z-index: 0;
+    }
+
+    .\30 6-two-paths-fail {
+      left: calc(785 * var(--u));
+      top: calc(499 * var(--u));
+      width: calc(230 * var(--u));
+      height: calc(52 * var(--u));
+      box-sizing: border-box;
+      border: 0.12cqw solid #1F2BE0;
+      background: #F0EBDE;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: calc(24 * var(--u));
+    }
+    .\30 6-two-paths-fail svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    /* svg strokes */
+    .\30 6-two-paths-draw {
+      fill: none;
+      stroke: #1F2BE0;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+    }
+  </style>
+
+  <div id="root" data-composition-id="06-two-paths" data-width="1920" data-height="1080" data-duration="16.98">
+    <div class="clip 06-two-paths-ground" data-start="0" data-duration="16.98" data-track-index="0"></div>
+
+    <div class="06-two-paths-stage">
+      <!-- frame furniture -->
+      <div class="06-two-paths-hair" style="top: calc(57 * var(--u));"></div>
+      <div class="06-two-paths-hair" style="top: calc(1021 * var(--u));"></div>
+      <div class="06-two-paths-chrome" style="left: calc(80 * var(--u));">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="06-two-paths-chrome" style="right: calc(80 * var(--u));">06 / 10</div>
+
+      <!-- vector layer: minimap + mechanism -->
+      <svg class="06-two-paths-svg" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="06-two-paths-mk-faint" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+            <path d="M0 0 L10 5 L0 10 Z" fill="rgba(31,43,224,0.18)" />
+          </marker>
+          <marker id="06-two-paths-mk-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto">
+            <path d="M0 0 L10 5 L0 10 Z" fill="#1F2BE0" />
+          </marker>
+        </defs>
+
+        <!-- minimap -->
+        <g id="06-two-paths-minimap">
+          <rect x="1440" y="96" width="400" height="170" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+          <g transform="translate(1433.1 64.5) scale(0.22)">
+            <rect x="580" y="300" width="580" height="560" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="6" stroke-dasharray="30 20" />
+            <!-- connections -->
+            <path d="M440 490 H672" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="6" marker-end="url(#06-two-paths-mk-faint)" />
+            <path d="M1060 450 H1200 V310 H1332" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="6" marker-end="url(#06-two-paths-mk-faint)" />
+            <path d="M1060 530 H1200 V670 H1332" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="6" marker-end="url(#06-two-paths-mk-faint)" />
+            <path id="06-two-paths-mm-link" d="M870 580 V670" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="10" marker-end="url(#06-two-paths-mk-ink)" />
+            <!-- boxes -->
+            <rect x="120" y="420" width="320" height="140" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="6" />
+            <rect id="06-two-paths-mm-server" x="680" y="400" width="380" height="180" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="6" />
+            <rect id="06-two-paths-mm-disk" x="720" y="680" width="300" height="120" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="6" />
+            <rect x="1340" y="240" width="420" height="140" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="6" />
+            <rect x="1340" y="600" width="420" height="140" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="6" />
+            <g font-family="Hanken Grotesk, Noto Sans TC, sans-serif" font-weight="600" font-size="64" text-anchor="middle" dominant-baseline="central">
+              <text x="280" y="490" fill="rgba(31,43,224,0.18)">瀏覽器</text>
+              <text id="06-two-paths-mm-server-t" x="870" y="490" fill="rgba(31,43,224,0.18)">FastAPI</text>
+              <text id="06-two-paths-mm-disk-t" x="870" y="740" fill="rgba(31,43,224,0.18)">磁碟</text>
+              <text x="1550" y="310" fill="rgba(31,43,224,0.18)">Live</text>
+              <text x="1550" y="670" fill="rgba(31,43,224,0.18)">Flash</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- rerun loop (square cycle) beside the file card -->
+        <path id="06-two-paths-loop" class="06-two-paths-draw" d="M1196 352 H1250 V412 H1180 V370" stroke-width="4" />
+        <polygon id="06-two-paths-loop-head" points="1171,372 1189,372 1180,355" fill="#1F2BE0" />
+
+        <!-- two write paths -->
+        <rect id="06-two-paths-up-node" x="734" y="519" width="12" height="12" fill="#1F2BE0" />
+        <path id="06-two-paths-up" class="06-two-paths-draw" d="M740 525 H1060 V650" stroke-width="4" />
+        <rect id="06-two-paths-low-node" x="734" y="769" width="12" height="12" fill="#1F2BE0" />
+        <path id="06-two-paths-low" class="06-two-paths-draw" d="M740 775 H1060 V650" stroke-width="4" />
+
+        <!-- merge into the lock -->
+        <path id="06-two-paths-merge" class="06-two-paths-draw" d="M1060 650 H1294" stroke-width="5" />
+        <polygon id="06-two-paths-merge-head" points="1292,640 1310,650 1292,660" fill="#1F2BE0" />
+
+        <!-- session_lock -->
+        <g id="06-two-paths-lock">
+          <path d="M1342 600 V562 H1398 V600" fill="none" stroke="#1F2BE0" stroke-width="9" stroke-linejoin="miter" />
+          <rect x="1310" y="600" width="120" height="100" fill="#1F2BE0" />
+          <rect x="1361" y="628" width="18" height="16" fill="#F0EBDE" />
+          <rect x="1366" y="640" width="8" height="28" fill="#F0EBDE" />
+        </g>
+
+        <!-- publish_final_notes arrow -->
+        <path id="06-two-paths-out" class="06-two-paths-draw" d="M1430 650 H1484" stroke-width="4" />
+        <polygon id="06-two-paths-out-head" points="1482,641 1499,650 1482,659" fill="#1F2BE0" />
+      </svg>
+
+      <!-- top bar -->
+      <div class="06-two-paths-layer" id="06-two-paths-layer">LAYER 04 / 07</div>
+      <div class="06-two-paths-title" id="06-two-paths-title">最終筆記</div>
+      <div class="06-two-paths-rule" id="06-two-paths-rule"></div>
+      <div class="06-two-paths-mmlabel" id="06-two-paths-mmlabel">架構位置</div>
+
+      <!-- left column -->
+      <div class="06-two-paths-card 06-two-paths-need" id="06-two-paths-need">
+        <div class="06-two-paths-kicker">需求</div>
+        <div class="06-two-paths-lede">整併失敗，素材不能跟著消失。</div>
+      </div>
+      <div class="06-two-paths-divider" id="06-two-paths-divider"></div>
+      <div class="06-two-paths-card 06-two-paths-design" id="06-two-paths-design">
+        <div class="06-two-paths-kicker">設計</div>
+        <div class="06-two-paths-lede">兩條路都經過同一把鎖</div>
+        <div class="06-two-paths-src">session_lock<br />publish_final_notes</div>
+      </div>
+
+      <!-- main stage -->
+      <div class="06-two-paths-file 06-two-paths-mono" id="06-two-paths-file">
+        <svg viewBox="0 0 34 30" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1.5" y="1.5" width="31" height="27" fill="none" stroke="#1F2BE0" stroke-width="3" />
+          <line x1="1.5" y1="19" x2="32.5" y2="19" stroke="#1F2BE0" stroke-width="3" />
+          <rect x="24" y="22" width="5" height="4" fill="#1F2BE0" />
+        </svg>
+        <span>finalize_input.json</span>
+      </div>
+      <div class="06-two-paths-rerun 06-two-paths-mono" id="06-two-paths-rerun">可重跑 · ADR 0002</div>
+
+      <div class="06-two-paths-uplabel 06-two-paths-body" id="06-two-paths-uplabel">① WebSocket 下課收尾</div>
+      <div class="06-two-paths-lowlabel 06-two-paths-body" id="06-two-paths-lowlabel">② POST /finalize（手動・背景）</div>
+
+      <div class="06-two-paths-locklabel 06-two-paths-mono" id="06-two-paths-locklabel">session_lock</div>
+      <div class="06-two-paths-publabel 06-two-paths-mono" id="06-two-paths-publabel">publish_final_notes</div>
+      <div class="06-two-paths-result 06-two-paths-mono" id="06-two-paths-result">
+        <div>final_notes.md</div>
+        <div class="06-two-paths-okline">
+          <span class="06-two-paths-mark">
+            <span class="06-two-paths-ring" id="06-two-paths-ring"></span>
+            <span class="06-two-paths-marktext">status: ok</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- the late failure (counterexample) -->
+      <div class="06-two-paths-fail 06-two-paths-mono" id="06-two-paths-fail">
+        <span>失敗 · fallback</span>
+        <svg viewBox="0 0 230 52" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+          <path id="06-two-paths-slash-a" class="06-two-paths-draw" d="M-8 -6 L238 58" stroke-width="3" />
+          <path id="06-two-paths-slash-b" class="06-two-paths-draw" d="M-8 58 L238 -6" stroke-width="3" />
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      var ID = "06-two-paths";
+      var $ = function (s) { return document.getElementById(ID + "-" + s); };
+      var INK = "#1F2BE0";
+      var PAPER = "#F0EBDE";
+      var FAINT = "rgba(31,43,224,0.18)";
+      var E = "power3.out";
+
+      var tl = gsap.timeline({ paused: true });
+
+      // svg-path-draw: measured length, dash = length, offset length -> 0
+      function draw(el, at, dur) {
+        var len = el.getTotalLength ? el.getTotalLength() : 0;
+        if (!len) { el.setAttribute("pathLength", "1000"); len = 1000; }
+        el.style.strokeDasharray = len + " " + len;
+        tl.fromTo(el, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: dur, ease: "power2.out" }, at);
+      }
+      function fadeUp(el, at, dur, dy) {
+        tl.fromTo(el, { opacity: 0, y: dy == null ? 24 : dy }, { opacity: 1, y: 0, duration: dur || 0.6, ease: E }, at);
+      }
+      function fadeIn(el, at, dur) {
+        tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: dur || 0.3, ease: "power1.out" }, at);
+      }
+
+      // ---- Scene 1 (0.0–2.4): top bar + minimap settle, relevant boxes light
+      fadeUp($("minimap"), 0.0, 0.6, 10);
+      fadeUp($("mmlabel"), 0.0, 0.6, 10);
+      fadeUp($("layer"), 0.05, 0.5, 14);
+      fadeUp($("title"), 0.15, 0.6, 24);
+      tl.fromTo($("rule"), { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: E }, 0.3);
+      // light server + disk + server->disk link after the layer name lands
+      tl.fromTo([$("mm-server"), $("mm-disk")], { fill: PAPER, stroke: FAINT }, { fill: INK, stroke: INK, duration: 0.45, ease: E }, 0.95);
+      tl.fromTo([$("mm-server-t"), $("mm-disk-t")], { fill: FAINT }, { fill: PAPER, duration: 0.45, ease: E }, 0.95);
+      tl.fromTo($("mm-link"), { stroke: FAINT }, { stroke: INK, duration: 0.45, ease: E }, 0.95);
+
+      // ---- Scene 2 (2.5–4.7): need card; finalize_input.json drops in from 8% above
+      fadeUp($("need"), 2.5, 0.6, 24);
+      fadeIn($("divider"), 2.7, 0.4);
+      tl.fromTo($("file"), { opacity: 0, yPercent: -107.5 }, { opacity: 1, yPercent: 0, duration: 0.8, ease: E }, 3.0);
+
+      // ---- Scene 3 (4.8–6.5): rerun loop draws, mono tag
+      draw($("loop"), 4.85, 0.6);
+      fadeIn($("loop-head"), 5.38, 0.2);
+      tl.fromTo($("rerun"), { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 5.55);
+
+      // ---- Scene 4 (6.6–10.7): upper path at 7.9, lower path at 8.9
+      fadeIn($("up-node"), 7.9, 0.2);
+      fadeUp($("uplabel"), 7.9, 0.5, 12);
+      draw($("up"), 7.95, 0.75);
+      fadeIn($("low-node"), 8.9, 0.2);
+      fadeUp($("lowlabel"), 8.9, 0.5, -12);
+      draw($("low"), 8.95, 0.75);
+
+      // ---- Scene 5 (10.8–12.9): design card; paths merge; lock; publish -> final_notes.md
+      fadeUp($("design"), 10.8, 0.6, 24);
+      draw($("merge"), 11.05, 0.4);
+      fadeIn($("merge-head"), 11.4, 0.15);
+      tl.fromTo($("lock"), { scale: 0, opacity: 0, transformOrigin: "50% 50%" }, { scale: 1, opacity: 1, duration: 0.55, ease: E }, 11.3);
+      fadeUp($("locklabel"), 11.6, 0.45, 10);
+      draw($("out"), 11.95, 0.3);
+      fadeIn($("out-head"), 12.2, 0.15);
+      fadeUp($("publabel"), 12.15, 0.45, 10);
+      tl.fromTo($("result"), { scale: 0, opacity: 0, transformOrigin: "50% 50%" }, { scale: 1, opacity: 1, duration: 0.55, ease: E }, 12.3);
+
+      // ---- Scene 6 (13.0–16.48): late failure slides along the upper path, stopped at the lock
+      var fail = $("fail");
+      // later segments share props with the pop, so they must not render at build time
+      tl.fromTo(fail, { scale: 0, opacity: 0, xPercent: 0, yPercent: 0, transformOrigin: "50% 50%" }, { scale: 1, opacity: 1, duration: 0.4, ease: E }, 13.05);
+      tl.fromTo(fail, { xPercent: 0 }, { xPercent: 69.565, duration: 0.6, ease: "power1.in", immediateRender: false }, 13.45);
+      tl.fromTo(fail, { yPercent: 0 }, { yPercent: 240.385, duration: 0.35, ease: "none", immediateRender: false }, 14.05);
+      tl.fromTo(fail, { xPercent: 69.565 }, { xPercent: 122.609, duration: 0.45, ease: E, immediateRender: false }, 14.4);
+      draw($("slash-a"), 14.95, 0.25);
+      draw($("slash-b"), 15.1, 0.25);
+      // css-marker box around status: ok (square ring, smooth settle)
+      tl.fromTo($("ring"),
+        { xPercent: -50, yPercent: -50, rotation: -2, scale: 0, opacity: 0 },
+        { xPercent: -50, yPercent: -50, rotation: -2, scale: 1, opacity: 1, duration: 0.5, ease: E }, 15.45);
+      // then hold still to 16.48
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines[ID] = tl;
+    })();
+  </script>
+</template>

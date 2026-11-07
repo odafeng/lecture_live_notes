@@ -1,0 +1,523 @@
+<template>
+  <style>
+    @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+    @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      color: #1F2BE0;
+    }
+
+    /* ---------- ground: paper + permanent graph-paper grid (full-duration clip) ---------- */
+    .\30 8-translations-bg {
+      position: absolute;
+      inset: 0;
+      container-type: size;
+      background-color: #F0EBDE;
+      background-image:
+        linear-gradient(to right, rgba(31,43,224,0.10) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(31,43,224,0.10) 1px, transparent 1px);
+      background-size: 2% 3.5556%;
+    }
+    .\30 8-translations-hair {
+      position: absolute;
+      left: 4.1667cqw;
+      width: 91.6667cqw;
+      height: 0.12cqw;
+      background: #1F2BE0;
+    }
+    .\30 8-translations-hair-top { top: 3cqw; }
+    .\30 8-translations-hair-bot { bottom: 3cqw; }
+    .\30 8-translations-chrome {
+      position: absolute;
+      bottom: 3.9cqw;
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: 0.6771cqw;
+      letter-spacing: 0.06em;
+      color: #1F2BE0;
+      white-space: nowrap;
+    }
+    .\30 8-translations-chrome-l { left: 4.1667cqw; }
+    .\30 8-translations-chrome-r { right: 4.1667cqw; }
+
+    /* ---------- stage (all content, coordinates in canvas px via --u) ---------- */
+    .\30 8-translations-stage {
+      position: absolute;
+      inset: 0;
+      container-type: size;
+      --u: calc(100cqw / 1920);
+    }
+    .\30 8-translations-stage * { box-sizing: border-box; }
+    .\30 8-translations-abs { position: absolute; }
+    .\30 8-translations-mono { font-family: "DM Mono", "Noto Sans TC", monospace; }
+    .\30 8-translations-body { font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif; }
+    .\30 8-translations-display { font-family: "Newsreader", "Noto Serif TC", serif; }
+
+    /* top bar */
+    .\30 8-translations-layer-label {
+      left: calc(var(--u) * 80);
+      top: calc(var(--u) * 100);
+      font-size: calc(var(--u) * 27);
+      letter-spacing: 0.06em;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .\30 8-translations-layer-name {
+      left: calc(var(--u) * 78);
+      top: calc(var(--u) * 138);
+      font-size: calc(var(--u) * 88);
+      font-weight: 600;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .\30 8-translations-topbar-rule {
+      left: calc(var(--u) * 80);
+      top: calc(var(--u) * 268);
+      width: calc(var(--u) * 1320);
+      height: calc(var(--u) * 2.3);
+      background: #1F2BE0;
+      transform-origin: left center;
+    }
+
+    /* minimap */
+    .\30 8-translations-mini {
+      left: calc(var(--u) * 1440);
+      top: calc(var(--u) * 96);
+      width: calc(var(--u) * 400);
+      height: calc(var(--u) * 170);
+      border: calc(var(--u) * 2.3) solid #1F2BE0;
+      background: #F0EBDE;
+    }
+    .\30 8-translations-mini-label {
+      position: absolute;
+      left: calc(var(--u) * 14);
+      top: calc(var(--u) * -13);
+      padding: 0 calc(var(--u) * 6);
+      background: #F0EBDE;
+      font-size: calc(var(--u) * 15);
+      line-height: 1.4;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .\30 8-translations-mini-svg {
+      position: absolute;
+      left: calc(var(--u) * 17.7);
+      top: calc(var(--u) * 10.7);
+      width: calc(var(--u) * 361);
+      height: calc(var(--u) * 145);
+      overflow: visible;
+    }
+    .\30 8-translations-mini-svg text {
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 600;
+      font-size: 66px;
+    }
+
+    /* left column: need / design cards */
+    .\30 8-translations-card { left: calc(var(--u) * 80); width: calc(var(--u) * 540); }
+    .\30 8-translations-need { top: calc(var(--u) * 336); }
+    .\30 8-translations-design { top: calc(var(--u) * 560); }
+    .\30 8-translations-tag {
+      display: flex;
+      align-items: center;
+      gap: calc(var(--u) * 12);
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 700;
+      font-size: calc(var(--u) * 22);
+      letter-spacing: 0.18em;
+      line-height: 1.3;
+    }
+    .\30 8-translations-tag-mark {
+      width: calc(var(--u) * 14);
+      height: calc(var(--u) * 14);
+      background: #1F2BE0;
+      flex: none;
+    }
+    .\30 8-translations-line {
+      margin-top: calc(var(--u) * 16);
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 500;
+      font-size: calc(var(--u) * 36);
+      line-height: 1.35;
+      white-space: nowrap;
+    }
+    .\30 8-translations-src {
+      margin-top: calc(var(--u) * 22);
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: calc(var(--u) * 27);
+      letter-spacing: 0.02em;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .\30 8-translations-divider {
+      left: calc(var(--u) * 80);
+      top: calc(var(--u) * 512);
+      width: calc(var(--u) * 540);
+      height: calc(var(--u) * 1.5);
+      background: rgba(31,43,224,0.18);
+      transform-origin: left center;
+    }
+
+    /* main stage: connectors */
+    .\30 8-translations-links {
+      left: 0;
+      top: 0;
+      width: calc(var(--u) * 1920);
+      height: calc(var(--u) * 1080);
+      overflow: visible;
+      z-index: 1;
+    }
+
+    /* main stage: original card */
+    .\30 8-translations-orig {
+      left: calc(var(--u) * 710);
+      top: calc(var(--u) * 455);
+      width: calc(var(--u) * 320);
+      height: calc(var(--u) * 300);
+      border: calc(var(--u) * 2.3) solid #1F2BE0;
+      background: #F0EBDE;
+      z-index: 3;
+    }
+    .\30 8-translations-orig-thick {
+      position: absolute;
+      inset: calc(var(--u) * -2.3);
+      border: calc(var(--u) * 7) solid #1F2BE0;
+    }
+    .\30 8-translations-doc-bar {
+      position: absolute;
+      left: calc(var(--u) * 26);
+      height: calc(var(--u) * 6);
+      background: #1F2BE0;
+      opacity: 0.35;
+    }
+    .\30 8-translations-orig-file {
+      left: calc(var(--u) * 26);
+      top: calc(var(--u) * 150);
+      font-size: calc(var(--u) * 28);
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .\30 8-translations-orig-name {
+      left: calc(var(--u) * 24);
+      top: calc(var(--u) * 196);
+      font-size: calc(var(--u) * 46);
+      font-weight: 600;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    /* main stage: translation cards */
+    .\30 8-translations-tcard {
+      left: calc(var(--u) * 1110);
+      width: calc(var(--u) * 400);
+      height: calc(var(--u) * 112);
+      border: calc(var(--u) * 2.3) solid #1F2BE0;
+      background: #F0EBDE;
+      z-index: 2;
+    }
+    .\30 8-translations-tinner { position: absolute; inset: 0; }
+    .\30 8-translations-thead {
+      position: absolute;
+      left: calc(var(--u) * 22);
+      top: calc(var(--u) * 16);
+      display: flex;
+      align-items: baseline;
+      gap: calc(var(--u) * 12);
+      white-space: nowrap;
+    }
+    .\30 8-translations-tcode {
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: calc(var(--u) * 40);
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+    }
+    .\30 8-translations-tdot {
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: calc(var(--u) * 28);
+    }
+    .\30 8-translations-tname {
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 600;
+      font-size: calc(var(--u) * 28);
+      line-height: 1.2;
+    }
+    .\30 8-translations-tbtn {
+      position: absolute;
+      right: calc(var(--u) * 14);
+      bottom: calc(var(--u) * 12);
+      width: calc(var(--u) * 124);
+      height: calc(var(--u) * 48);
+    }
+    .\30 8-translations-tbtn-inner {
+      position: absolute;
+      inset: 0;
+      border: calc(var(--u) * 2.3) solid #1F2BE0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(var(--u) * 8);
+      font-family: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      font-weight: 700;
+      font-size: calc(var(--u) * 27);
+      line-height: 1;
+    }
+    .\30 8-translations-tbtn-icon {
+      width: calc(var(--u) * 16);
+      height: calc(var(--u) * 20);
+      flex: none;
+    }
+
+    /* failure / not-allowed: cobalt cross strokes (no red) */
+    .\30 8-translations-slash {
+      position: absolute;
+      left: 0;
+      height: calc(var(--u) * 3.1);
+      margin-top: calc(var(--u) * -1.55);
+      background: #1F2BE0;
+      transform-origin: left center;
+      z-index: 4;
+    }
+    .\30 8-translations-slash-card { width: calc(var(--u) * 415.4); }
+    .\30 8-translations-slash-btn { width: calc(var(--u) * 133); }
+    .\30 8-translations-slash-up-card { top: calc(var(--u) * 112); }
+    .\30 8-translations-slash-up-btn { top: calc(var(--u) * 48); }
+    .\30 8-translations-slash-down { top: 0; }
+
+    /* annotations beside cards */
+    .\30 8-translations-note {
+      left: calc(var(--u) * 1516);
+      display: flex;
+      align-items: center;
+      gap: calc(var(--u) * 10);
+      font-family: "DM Mono", "Noto Sans TC", monospace;
+      font-size: calc(var(--u) * 27);
+      letter-spacing: 0;
+      line-height: calc(var(--u) * 36);
+      white-space: nowrap;
+    }
+    .\30 8-translations-note-lead {
+      width: calc(var(--u) * 16);
+      height: calc(var(--u) * 2.3);
+      background: #1F2BE0;
+      flex: none;
+    }
+  </style>
+
+  <div id="root" data-composition-id="08-translations" data-width="1920" data-height="1080" data-duration="14.8">
+
+    <!-- ground: paper, grid, hairlines, page chrome -->
+    <div id="08-translations-bg" class="clip 08-translations-bg" data-start="0" data-duration="14.8" data-track-index="0">
+      <div class="08-translations-hair 08-translations-hair-top"></div>
+      <div class="08-translations-hair 08-translations-hair-bot"></div>
+      <div class="08-translations-chrome 08-translations-chrome-l">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="08-translations-chrome 08-translations-chrome-r">08 / 10</div>
+    </div>
+
+    <div id="08-translations-stage" class="clip 08-translations-stage" data-start="0" data-duration="14.8" data-track-index="1">
+
+      <!-- top bar -->
+      <div id="08-translations-layer-label" class="08-translations-abs 08-translations-mono 08-translations-layer-label">LAYER 06 / 07</div>
+      <div id="08-translations-layer-name" class="08-translations-abs 08-translations-display 08-translations-layer-name">翻譯</div>
+      <div id="08-translations-topbar-rule" class="08-translations-abs 08-translations-topbar-rule"></div>
+
+      <!-- architecture minimap (STAGE §4), drawn in canonical diagram coordinates -->
+      <div id="08-translations-mini" class="08-translations-abs 08-translations-mini">
+        <div class="08-translations-mono 08-translations-mini-label">架構位置</div>
+        <svg class="08-translations-mini-svg" viewBox="120 200 1640 660" preserveAspectRatio="xMidYMid meet">
+          <rect x="580" y="300" width="580" height="560" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="6" stroke-dasharray="30 20"></rect>
+          <!-- links -->
+          <g fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="8">
+            <path d="M440 490 H652"></path>
+            <path d="M1060 450 H1200 V310 H1312"></path>
+          </g>
+          <g fill="rgba(31,43,224,0.18)">
+            <polygon points="680,490 650,474 650,506"></polygon>
+            <polygon points="1340,310 1310,294 1310,326"></polygon>
+          </g>
+          <path id="08-translations-mini-l-flash" d="M1060 530 H1200 V670 H1312" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="10"></path>
+          <polygon id="08-translations-mini-a-flash" points="1340,670 1310,654 1310,686" fill="rgba(31,43,224,0.18)"></polygon>
+          <path id="08-translations-mini-l-disk" d="M870 580 V652" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="10"></path>
+          <polygon id="08-translations-mini-a-disk" points="870,680 854,650 886,650" fill="rgba(31,43,224,0.18)"></polygon>
+          <!-- boxes -->
+          <rect x="120" y="420" width="320" height="140" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="8"></rect>
+          <text x="280" y="490" text-anchor="middle" dominant-baseline="central" fill="rgba(31,43,224,0.18)">瀏覽器</text>
+          <rect x="680" y="400" width="380" height="180" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="8"></rect>
+          <text x="870" y="490" text-anchor="middle" dominant-baseline="central" fill="rgba(31,43,224,0.18)">FastAPI</text>
+          <rect x="1340" y="240" width="420" height="140" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="8"></rect>
+          <text x="1550" y="310" text-anchor="middle" dominant-baseline="central" fill="rgba(31,43,224,0.18)">Live</text>
+          <rect id="08-translations-mini-b-disk" x="720" y="680" width="300" height="120" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="8"></rect>
+          <text id="08-translations-mini-t-disk" x="870" y="740" text-anchor="middle" dominant-baseline="central" fill="rgba(31,43,224,0.18)">磁碟</text>
+          <rect id="08-translations-mini-b-flash" x="1340" y="600" width="420" height="140" fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="8"></rect>
+          <text id="08-translations-mini-t-flash" x="1550" y="670" text-anchor="middle" dominant-baseline="central" fill="rgba(31,43,224,0.18)">Flash</text>
+        </svg>
+      </div>
+
+      <!-- left column: need -->
+      <div id="08-translations-need" class="08-translations-abs 08-translations-card 08-translations-need">
+        <div id="08-translations-need-tag" class="08-translations-tag"><span class="08-translations-tag-mark"></span>需求</div>
+        <div id="08-translations-need-line" class="08-translations-line">組員裡，有人不讀中文。</div>
+      </div>
+      <div id="08-translations-divider" class="08-translations-abs 08-translations-divider"></div>
+      <!-- left column: design -->
+      <div id="08-translations-design" class="08-translations-abs 08-translations-card 08-translations-design">
+        <div id="08-translations-design-tag" class="08-translations-tag"><span class="08-translations-tag-mark"></span>設計</div>
+        <div id="08-translations-design-line" class="08-translations-line">整併成功之後，才獨立翻譯</div>
+        <div id="08-translations-design-src" class="08-translations-src">write_translations() · ADR 0006</div>
+      </div>
+
+      <!-- main stage: fan-out connectors from the original to each translation -->
+      <svg class="08-translations-abs 08-translations-links" viewBox="0 0 1920 1080">
+        <g fill="none" stroke="#1F2BE0" stroke-width="2.3">
+          <path id="08-translations-link-en" data-len="274" d="M1030 605 H1070 V401 H1100"></path>
+          <path id="08-translations-link-de" data-len="138" d="M1030 605 H1070 V537 H1100"></path>
+          <path id="08-translations-link-pl" data-len="138" d="M1030 605 H1070 V673 H1100"></path>
+          <path id="08-translations-link-es" data-len="274" d="M1030 605 H1070 V809 H1100"></path>
+        </g>
+        <g fill="#1F2BE0">
+          <polygon id="08-translations-arrow-en" points="1110,401 1098,394 1098,408"></polygon>
+          <polygon id="08-translations-arrow-de" points="1110,537 1098,530 1098,544"></polygon>
+          <polygon id="08-translations-arrow-pl" points="1110,673 1098,666 1098,680"></polygon>
+          <polygon id="08-translations-arrow-es" points="1110,809 1098,802 1098,816"></polygon>
+        </g>
+      </svg>
+
+      <!-- main stage: original final_notes.md -->
+      <div id="08-translations-orig" class="08-translations-abs 08-translations-orig">
+        <div class="08-translations-doc-bar" style="top: calc(var(--u) * 34); width: calc(var(--u) * 262);"></div>
+        <div class="08-translations-doc-bar" style="top: calc(var(--u) * 54); width: calc(var(--u) * 230);"></div>
+        <div class="08-translations-doc-bar" style="top: calc(var(--u) * 74); width: calc(var(--u) * 262);"></div>
+        <div class="08-translations-doc-bar" style="top: calc(var(--u) * 94); width: calc(var(--u) * 190);"></div>
+        <div class="08-translations-doc-bar" style="top: calc(var(--u) * 114); width: calc(var(--u) * 140);"></div>
+        <div class="08-translations-abs 08-translations-mono 08-translations-orig-file">final_notes.md</div>
+        <div class="08-translations-abs 08-translations-display 08-translations-orig-name">繁中正本</div>
+        <div id="08-translations-orig-thick" class="08-translations-orig-thick"></div>
+      </div>
+
+      <!-- main stage: four translations -->
+      <div id="08-translations-card-en" class="08-translations-abs 08-translations-tcard" style="top: calc(var(--u) * 345);">
+        <div id="08-translations-inner-en" class="08-translations-tinner">
+          <div class="08-translations-thead"><span class="08-translations-tcode">EN</span><span class="08-translations-tdot">·</span><span class="08-translations-tname">English</span></div>
+          <div class="08-translations-tbtn"><div class="08-translations-tbtn-inner"><svg class="08-translations-tbtn-icon" viewBox="0 0 16 20"><path d="M8 1 V14 M2 9 L8 15 L14 9 M1 19 H15" fill="none" stroke="#1F2BE0" stroke-width="2.2"></path></svg>下載</div></div>
+        </div>
+      </div>
+
+      <div id="08-translations-card-de" data-layout-allow-occlusion class="08-translations-abs 08-translations-tcard" style="top: calc(var(--u) * 481);">
+        <div id="08-translations-inner-de" class="08-translations-tinner">
+          <div class="08-translations-thead"><span class="08-translations-tcode">DE</span><span class="08-translations-tdot">·</span><span class="08-translations-tname">German</span></div>
+          <div class="08-translations-tbtn">
+            <div id="08-translations-btn-inner-de" class="08-translations-tbtn-inner"><svg class="08-translations-tbtn-icon" viewBox="0 0 16 20"><path d="M8 1 V14 M2 9 L8 15 L14 9 M1 19 H15" fill="none" stroke="#1F2BE0" stroke-width="2.2"></path></svg>下載</div>
+            <span id="08-translations-btn-x1" data-layout-allow-occlusion class="08-translations-slash 08-translations-slash-btn 08-translations-slash-up-btn"></span>
+            <span id="08-translations-btn-x2" data-layout-allow-occlusion class="08-translations-slash 08-translations-slash-btn 08-translations-slash-down"></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="08-translations-card-pl" data-layout-allow-occlusion class="08-translations-abs 08-translations-tcard" style="top: calc(var(--u) * 617);">
+        <div id="08-translations-inner-pl" class="08-translations-tinner">
+          <div class="08-translations-thead"><span class="08-translations-tcode">PL</span><span class="08-translations-tdot">·</span><span class="08-translations-tname">Polish</span></div>
+          <div class="08-translations-tbtn"><div class="08-translations-tbtn-inner"><svg class="08-translations-tbtn-icon" viewBox="0 0 16 20"><path d="M8 1 V14 M2 9 L8 15 L14 9 M1 19 H15" fill="none" stroke="#1F2BE0" stroke-width="2.2"></path></svg>下載</div></div>
+        </div>
+        <span id="08-translations-pl-x1" class="08-translations-slash 08-translations-slash-card 08-translations-slash-up-card"></span>
+        <span id="08-translations-pl-x2" data-layout-allow-occlusion class="08-translations-slash 08-translations-slash-card 08-translations-slash-down"></span>
+      </div>
+
+      <div id="08-translations-card-es" class="08-translations-abs 08-translations-tcard" style="top: calc(var(--u) * 753);">
+        <div id="08-translations-inner-es" class="08-translations-tinner">
+          <div class="08-translations-thead"><span class="08-translations-tcode">ES</span><span class="08-translations-tdot">·</span><span class="08-translations-tname">Spanish</span></div>
+          <div class="08-translations-tbtn"><div class="08-translations-tbtn-inner"><svg class="08-translations-tbtn-icon" viewBox="0 0 16 20"><path d="M8 1 V14 M2 9 L8 15 L14 9 M1 19 H15" fill="none" stroke="#1F2BE0" stroke-width="2.2"></path></svg>下載</div></div>
+        </div>
+      </div>
+
+      <!-- annotations -->
+      <div id="08-translations-note-pl" class="08-translations-abs 08-translations-note" style="top: calc(var(--u) * 655);"><span class="08-translations-note-lead"></span>失敗 · 跳過</div>
+      <div id="08-translations-note-mtime" class="08-translations-abs 08-translations-note" style="top: calc(var(--u) * 495);"><span class="08-translations-note-lead"></span>mtime &lt; 正本</div>
+      <div id="08-translations-note-404" class="08-translations-abs 08-translations-note" style="top: calc(var(--u) * 543);"><span class="08-translations-note-lead"></span>404 · is_current()</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+  <script>
+    (function () {
+      const $ = (n) => document.getElementById("08-translations-" + n);
+      const INK = "#1F2BE0";
+      const PAPER = "#F0EBDE";
+      const FAINT = "rgba(31,43,224,0.18)";
+      const E = "power3.out";
+
+      const tl = gsap.timeline({ paused: true });
+
+      // Scene 1 (0.0–1.8): top bar + minimap settle, then this layer's boxes light up
+      tl.fromTo($("mini"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 0);
+      tl.fromTo($("layer-label"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 0.1);
+      tl.fromTo($("layer-name"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.8, ease: E }, 0.25);
+      tl.fromTo($("topbar-rule"), { scaleX: 0 }, { scaleX: 1, duration: 1.0, ease: E }, 0.4);
+
+      tl.fromTo([$("mini-b-flash"), $("mini-b-disk")], { fill: PAPER, stroke: FAINT }, { fill: INK, stroke: INK, duration: 0.5, ease: E, stagger: 0.12 }, 1.05);
+      tl.fromTo([$("mini-t-flash"), $("mini-t-disk")], { fill: FAINT }, { fill: PAPER, duration: 0.5, ease: E, stagger: 0.12 }, 1.05);
+      tl.fromTo([$("mini-l-flash"), $("mini-l-disk")], { stroke: FAINT }, { stroke: INK, duration: 0.5, ease: E, stagger: 0.12 }, 1.2);
+      tl.fromTo([$("mini-a-flash"), $("mini-a-disk")], { fill: FAINT }, { fill: INK, duration: 0.5, ease: E, stagger: 0.12 }, 1.2);
+
+      // Scene 2 (1.9–3.7): need card
+      tl.fromTo($("need-tag"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 1.9);
+      tl.fromTo($("need-line"), { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 2.05);
+
+      // Scene 3 (3.8–6.4): design card, then the original lands and its frame thickens
+      tl.fromTo($("divider"), { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: E }, 3.8);
+      tl.fromTo($("design-tag"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 3.9);
+      tl.fromTo($("design-line"), { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 4.05);
+      tl.fromTo($("design-src"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 4.4);
+      tl.fromTo($("orig"), { opacity: 0, y: 24, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: E }, 4.7);
+      tl.fromTo($("orig-thick"), { opacity: 0 }, { opacity: 1, duration: 0.4, ease: E }, 5.55);
+
+      // Scene 4 (6.5–9.5): center-outward-expansion — every translation leaves the
+      // original's center (870, 605) and settles in its slot on "英 / 德 / 波蘭 / 西班牙"
+      const ORIGIN_X = 870, ORIGIN_Y = 605, CARD_CX = 1310;
+      const fan = [
+        { k: "en", cy: 401, land: 6.8 },
+        { k: "de", cy: 537, land: 7.4 },
+        { k: "pl", cy: 673, land: 7.8 },
+        { k: "es", cy: 809, land: 8.2 },
+      ];
+      fan.forEach((f) => {
+        const start = f.land - 0.6;
+        tl.fromTo(
+          $("card-" + f.k),
+          { x: ORIGIN_X - CARD_CX, y: ORIGIN_Y - f.cy, scale: 0.6, opacity: 0 },
+          { x: 0, y: 0, scale: 1, opacity: 1, duration: 0.9, ease: E },
+          start
+        );
+        const path = $("link-" + f.k);
+        const len = Number(path.dataset.len);
+        tl.fromTo(path, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.7, ease: E }, start + 0.15);
+        tl.fromTo($("arrow-" + f.k), { opacity: 0 }, { opacity: 1, duration: 0.3, ease: E }, start + 0.6);
+      });
+
+      // Scene 5 (9.6–11.3): PL fails — crossed out, dimmed; nothing else moves
+      tl.fromTo($("pl-x1"), { rotation: -15.64, scaleX: 0 }, { rotation: -15.64, scaleX: 1, duration: 0.35, ease: E }, 9.8);
+      tl.fromTo($("pl-x2"), { rotation: 15.64, scaleX: 0 }, { rotation: 15.64, scaleX: 1, duration: 0.35, ease: E }, 9.98);
+      tl.fromTo($("inner-pl"), { opacity: 1 }, { opacity: 0.3, duration: 0.5, ease: E }, 10.1);
+      tl.fromTo([$("link-pl"), $("arrow-pl")], { opacity: 1 }, { opacity: 0.25, duration: 0.5, ease: E }, 10.1);
+      tl.fromTo($("note-pl"), { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.6, ease: E }, 10.3);
+
+      // Scene 6 (11.4–14.3): DE is older than the original — its download is struck, 404
+      tl.fromTo($("note-mtime"), { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.6, ease: E }, 11.6);
+      tl.fromTo($("btn-x1"), { rotation: -21.16, scaleX: 0 }, { rotation: -21.16, scaleX: 1, duration: 0.3, ease: E }, 12.9);
+      tl.fromTo($("btn-x2"), { rotation: 21.16, scaleX: 0 }, { rotation: 21.16, scaleX: 1, duration: 0.3, ease: E }, 13.05);
+      tl.fromTo($("btn-inner-de"), { opacity: 1 }, { opacity: 0.3, duration: 0.4, ease: E }, 13.1);
+      tl.fromTo($("note-404"), { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.6, ease: E }, 13.3);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["08-translations"] = tl;
+    })();
+  </script>
+</template>

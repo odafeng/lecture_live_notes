@@ -1,0 +1,440 @@
+<template>
+  <div
+    id="root"
+    data-composition-id="01-hook"
+    data-start="0"
+    data-duration="10.5"
+    data-width="1920"
+    data-height="1080"
+  >
+    <style>
+      @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+      @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+      @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+      @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        container-type: size;
+      }
+
+      [data-composition-id="01-hook"] {
+        --paper: #F0EBDE;
+        --ink: #1F2BE0;
+        --ink-soft: #5560E5;
+        --grid: rgba(31, 43, 224, 0.10);
+        --ink-faint: rgba(31, 43, 224, 0.18);
+        --display: "Newsreader", "Noto Serif TC", serif;
+        --body: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+        --mono: "DM Mono", "Noto Sans TC", monospace;
+      }
+
+      /* full-bleed ground: paper + permanent graph-paper grid */
+      [data-composition-id="01-hook"] .bg {
+        position: absolute;
+        inset: 0;
+        background-color: var(--paper);
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 2cqw 2cqw;
+      }
+
+      [data-composition-id="01-hook"] .stage {
+        position: absolute;
+        inset: 0;
+        container-type: size;
+        color: var(--ink);
+      }
+
+      /* furniture */
+      [data-composition-id="01-hook"] .hairline {
+        position: absolute;
+        left: 4cqw;
+        right: 4cqw;
+        height: 0.12cqw;
+        background: var(--ink);
+      }
+      [data-composition-id="01-hook"] .hairline.top { top: 3cqw; }
+      [data-composition-id="01-hook"] .hairline.bottom { bottom: 3cqw; }
+      [data-composition-id="01-hook"] .chrome {
+        position: absolute;
+        bottom: 3.6cqw;
+        font-family: var(--mono);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        color: var(--ink);
+      }
+      [data-composition-id="01-hook"] .chrome.left { left: 4cqw; }
+      [data-composition-id="01-hook"] .chrome.right { right: 4cqw; }
+
+      /* pixel-glitch column (background, right) */
+      [data-composition-id="01-hook"] .glitch {
+        position: absolute;
+        right: 4cqw;
+        top: 5cqw;
+        width: 20cqw;
+        height: 40.8cqw;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        opacity: 0.5;
+      }
+      [data-composition-id="01-hook"] .glitch .step {
+        height: 5.83cqw;
+        background-color: var(--paper);
+        background-image: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 8px);
+        transform-origin: 100% 50%;
+      }
+
+      /* qr-block (background, top-right) */
+      [data-composition-id="01-hook"] .qr {
+        position: absolute;
+        right: 4cqw;
+        top: 5cqw;
+        width: 6.67cqw;
+        height: 6.67cqw;
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        grid-template-rows: repeat(8, 1fr);
+        background: var(--paper);
+        outline: 0.12cqw solid var(--paper);
+      }
+      [data-composition-id="01-hook"] .qr i { background: var(--grid); }
+      [data-composition-id="01-hook"] .qr i.on { background: var(--ink); }
+
+      /* pain group: hero + handwritten strips */
+      [data-composition-id="01-hook"] .pain {
+        position: absolute;
+        inset: 0;
+        transform-origin: 4cqw 9.9cqw;
+      }
+      [data-composition-id="01-hook"] .hero {
+        position: absolute;
+        left: 4cqw;
+        top: 9.9cqw;
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 10.4cqw;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+      [data-composition-id="01-hook"] .hero .word {
+        display: inline-block;
+        margin-right: 0.28em;
+      }
+      [data-composition-id="01-hook"] .strips {
+        position: absolute;
+        left: 4cqw;
+        top: 26cqw;
+        width: 63.5cqw;
+      }
+      [data-composition-id="01-hook"] .strip {
+        position: relative;
+        height: 2.9cqw;
+        border-bottom: 0.06cqw solid var(--ink-faint);
+      }
+      [data-composition-id="01-hook"] .strip .strokes {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.9cqw;
+      }
+      [data-composition-id="01-hook"] .strip .strokes span {
+        display: block;
+        height: 0.32cqw;
+        background: var(--ink);
+      }
+      [data-composition-id="01-hook"] .strip .gap {
+        position: absolute;
+        top: 0.35cqw;
+        bottom: 0.35cqw;
+        background: var(--paper);
+        border: 0.1cqw dashed var(--ink-soft);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transform-origin: 50% 50%;
+      }
+      [data-composition-id="01-hook"] .strip .gap b {
+        font-family: var(--mono);
+        font-weight: 400;
+        font-size: 1.4cqw;
+        line-height: 1.25;
+        color: var(--ink);
+      }
+
+      /* footnote the pain group collapses into */
+      [data-composition-id="01-hook"] .footnote {
+        position: absolute;
+        left: 4cqw;
+        top: 5cqw;
+        font-family: var(--mono);
+        font-size: 1.4cqw;
+        letter-spacing: 0.06em;
+        line-height: 1.25;
+      }
+
+      /* incoming statement */
+      [data-composition-id="01-hook"] .statement {
+        position: absolute;
+        left: 4cqw;
+        top: 19.4cqw;
+        width: 4em;
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 6.8cqw;
+        line-height: 1.25;
+        white-space: nowrap;
+        transform-origin: 50% 50%;
+        z-index: 3;
+      }
+
+      /* final_notes.md card */
+      [data-composition-id="01-hook"] .card {
+        position: absolute;
+        left: 36.5cqw;
+        top: 10.4cqw;
+        width: 47.9cqw;
+        background: var(--paper);
+        border: 0.12cqw solid var(--ink);
+        z-index: 4;
+      }
+      [data-composition-id="01-hook"] .card .topbar {
+        padding: 1.3cqw 1.6cqw;
+        border-bottom: 0.12cqw solid var(--ink);
+        font-family: var(--mono);
+        font-size: 1.5cqw;
+        letter-spacing: 0.05em;
+        line-height: 1.25;
+      }
+      [data-composition-id="01-hook"] .card .row {
+        display: grid;
+        grid-template-columns: 3.5cqw 22cqw 1fr 1.6cqw;
+        column-gap: 1.2cqw;
+        align-items: center;
+        height: 6cqw;
+        padding: 0 1.6cqw;
+        border-bottom: 0.06cqw solid var(--ink-faint);
+      }
+      [data-composition-id="01-hook"] .card .row:last-child { border-bottom: none; }
+      [data-composition-id="01-hook"] .card .num {
+        font-family: var(--mono);
+        font-size: 1.4cqw;
+        letter-spacing: 0.05em;
+      }
+      [data-composition-id="01-hook"] .card .name {
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 2.1cqw;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+      [data-composition-id="01-hook"] .card .desc {
+        display: flex;
+        align-items: center;
+        gap: 0.8cqw;
+      }
+      [data-composition-id="01-hook"] .card .desc span {
+        display: block;
+        height: 0.32cqw;
+        background: var(--ink-soft);
+      }
+      [data-composition-id="01-hook"] .card .done {
+        width: 1.1cqw;
+        height: 1.1cqw;
+        background: var(--ink);
+        justify-self: end;
+      }
+
+      /* 下課 stamp */
+      [data-composition-id="01-hook"] .stamp {
+        position: absolute;
+        left: 78cqw;
+        top: 7.8cqw;
+        width: 9cqw;
+        height: 9cqw;
+        background: var(--ink);
+        color: var(--paper);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Noto Sans TC", sans-serif;
+        font-weight: 700;
+        font-size: 3.6cqw;
+        line-height: 1.25;
+        z-index: 5;
+      }
+      [data-composition-id="01-hook"] .stamp::before {
+        content: "";
+        position: absolute;
+        inset: 0.6cqw;
+        border: 0.12cqw solid var(--paper);
+      }
+    </style>
+
+    <div class="clip bg" data-start="0" data-duration="10.5" data-track-index="0"></div>
+
+    <div class="clip stage" id="01-hook-stage" data-start="0" data-duration="10.5" data-track-index="1">
+      <div class="hairline top"></div>
+      <div class="hairline bottom"></div>
+      <div class="chrome left">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="chrome right">01 / 10</div>
+
+      <div class="glitch">
+        <div class="step" style="width: 18cqw"></div>
+        <div class="step" style="width: 12cqw"></div>
+        <div class="step" style="width: 20cqw"></div>
+        <div class="step" style="width: 15cqw"></div>
+        <div class="step" style="width: 8cqw"></div>
+        <div class="step" style="width: 16cqw"></div>
+        <div class="step" style="width: 11cqw"></div>
+      </div>
+      <div class="qr"></div>
+
+      <div class="pain">
+        <div class="hero"><span class="word">一堂課</span><span class="word">2 小時</span></div>
+        <div class="strips"></div>
+      </div>
+
+      <div class="footnote">09:00 → 11:00</div>
+      <div class="statement">只管聽課</div>
+
+      <div class="card">
+        <div class="topbar">final_notes.md</div>
+        <div class="row"><span class="num">01</span><span class="name">章節 1</span><span class="desc"></span><span class="done"></span></div>
+        <div class="row"><span class="num">02</span><span class="name">章節 2</span><span class="desc"></span><span class="done"></span></div>
+        <div class="row"><span class="num">03</span><span class="name">章節 3</span><span class="desc"></span><span class="done"></span></div>
+        <div class="row"><span class="num">04</span><span class="name">我的課堂筆記（原文）</span><span class="desc"></span><span class="done"></span></div>
+      </div>
+
+      <div class="stamp">下課</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const S = document.querySelector('[data-composition-id="01-hook"]');
+        const q = (sel) => S.querySelector(sel);
+        const qa = (sel) => Array.from(S.querySelectorAll(sel));
+
+        // ---- build static DOM (deterministic) ----
+        // QR mosaic: 8x8, 1 = cobalt cell
+        const QR = [
+          "11101011",
+          "10100110",
+          "11101101",
+          "00011010",
+          "10110011",
+          "01001110",
+          "11010101",
+          "10111011",
+        ];
+        q(".qr").innerHTML = QR.join("")
+          .split("")
+          .map((c) => (c === "1" ? '<i class="on"></i>' : "<i></i>"))
+          .join("");
+
+        // six handwritten strips: abstract pen strokes, widths in cqw
+        const STRIPS = [
+          [5.2, 2.4, 7.8, 3.6, 6.1, 2.9, 8.4, 4.2, 3.3],
+          [3.1, 6.6, 2.2, 5.4, 7.2, 3.8, 2.6, 6.9, 4.4, 2.8],
+          [7.4, 3.2, 4.8, 2.5, 6.3, 5.1, 3.6, 7.7],
+          [4.6, 2.3, 6.8, 3.9, 5.5, 2.7, 7.1, 3.4, 5.8],
+          [2.8, 5.9, 4.1, 7.6, 2.4, 6.2, 3.7, 4.9, 6.4],
+          [6.2, 3.5, 5.3, 2.6, 7.0, 4.0],
+        ];
+        // gaps cut into strips 2, 4, 5 (left / width in cqw)
+        const GAPS = { 1: [14, 11], 3: [26, 9.5], 4: [8, 13] };
+        q(".strips").innerHTML = STRIPS.map((ws, i) => {
+          const strokes = ws.map((w) => '<span style="width:' + w + 'cqw"></span>').join("");
+          const gap = GAPS[i]
+            ? '<div class="gap" style="left:' + GAPS[i][0] + "cqw;width:" + GAPS[i][1] + 'cqw"><b>漏</b></div>'
+            : "";
+          return '<div class="strip"><div class="strokes">' + strokes + "</div>" + gap + "</div>";
+        }).join("");
+
+        // card row desc strokes
+        const DESC = [
+          [4.2, 2.6, 5.4],
+          [3.8, 5.1, 2.2],
+          [5.6, 2.4, 3.9],
+          [2.9, 4.6, 3.1],
+        ];
+        qa(".card .desc").forEach((el, i) => {
+          el.innerHTML = DESC[i].map((w) => '<span style="width:' + w + 'cqw"></span>').join("");
+        });
+
+        // ---- timeline ----
+        const tl = gsap.timeline({ paused: true });
+        const CLIP_HIDDEN = "inset(0% 100% 0% 0%)";
+        const CLIP_SHOWN = "inset(0% 0% 0% 0%)";
+
+        // Scene 1 (0.6–2.2): 一堂課 → 2 小時, glitch column stair-steps in
+        const words = qa(".hero .word");
+        tl.fromTo(words[0], { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }, 0.5);
+        tl.fromTo(words[1], { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }, 1.4);
+        qa(".glitch .step").forEach((el, i) => {
+          tl.fromTo(el, { scaleX: 0 }, { scaleX: 1, duration: 0.4, ease: "power3.out" }, 0.6 + i * 0.12);
+        });
+        tl.fromTo(q(".qr"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 1.6);
+
+        // Scene 2 (2.2–3.9): strips draw left→right one by one, then gaps cut in
+        qa(".strip .strokes").forEach((el, i) => {
+          tl.fromTo(el, { clipPath: CLIP_HIDDEN }, { clipPath: CLIP_SHOWN, duration: 0.5, ease: "power3.out" }, 2.2 + i * 0.16);
+        });
+        qa(".strip .gap").forEach((el, i) => {
+          const t = 3.2 + i * 0.25;
+          tl.fromTo(el, { scaleX: 0 }, { scaleX: 1, duration: 0.3, ease: "power3.out" }, t);
+          tl.fromTo(el.querySelector("b"), { opacity: 0 }, { opacity: 1, duration: 0.25, ease: "power3.out" }, t + 0.12);
+        });
+
+        // Scene 3 (4.0–6.4): scale-swap — pain group shrinks into the top-left footnote,
+        // 只管聽課 arrives at center
+        const SWAP_AT = 4.1;
+        const EXIT_DUR = 0.45;
+        const OVERLAP = 0.15;
+        const CENTER_X = 622; // (960 - 76.8 - 4em/2) at 6.8cqw on the 1920 canvas
+        tl.fromTo(q(".pain"), { scale: 1, opacity: 1 }, { scale: 0.6, opacity: 0, duration: EXIT_DUR, ease: "power2.in" }, SWAP_AT);
+        tl.fromTo(
+          q(".statement"),
+          { x: CENTER_X, scale: 0.7, opacity: 0 },
+          { x: CENTER_X, scale: 1, opacity: 1, duration: 0.6, ease: "power3.out" },
+          SWAP_AT + EXIT_DUR - OVERLAP
+        );
+        tl.fromTo(q(".footnote"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, SWAP_AT + EXIT_DUR);
+
+        // Scene 4 (6.5–10.0): statement steps left, final_notes.md card assembles, rows stagger,
+        // 下課 stamp lands, then full stillness
+        tl.fromTo(q(".statement"), { x: CENTER_X }, { x: 0, duration: 0.7, ease: "power3.out", immediateRender: false }, 6.5);
+        tl.fromTo(q(".card"), { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 6.5);
+        tl.fromTo(q(".card .topbar"), { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power3.out" }, 6.75);
+        qa(".card .row").forEach((row, i) => {
+          const t = 7.0 + i * 0.35;
+          tl.fromTo(row, { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, t);
+          tl.fromTo(row.querySelector(".desc"), { clipPath: CLIP_HIDDEN }, { clipPath: CLIP_SHOWN, duration: 0.4, ease: "power3.out" }, t + 0.15);
+          tl.fromTo(row.querySelector(".done"), { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power3.out" }, t + 0.35);
+        });
+        tl.fromTo(
+          q(".stamp"),
+          { opacity: 0, scale: 1.4, rotation: -6 },
+          { opacity: 1, scale: 1, rotation: -6, duration: 0.3, ease: "power3.out" },
+          8.7
+        );
+
+        // hold still to the frame end
+        tl.set({}, {}, 10);
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["01-hook"] = tl;
+      })();
+    </script>
+  </div>
+</template>

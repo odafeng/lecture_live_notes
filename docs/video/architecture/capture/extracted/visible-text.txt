@@ -1,0 +1,518 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+錄音一整堂課，邊上課邊生出可複習的中文筆記。FastAPI 後端 + 無框架前端，全部跑在使用者自己的機器上。
+
+## 指令
+
+virtualenv 一律是專案裡的 `.venv`。這不是偏好問題：`launcher.py` 會用 `.venv/bin/python` 去啟動 server，而 `tests/test_launcher.py` 真的會跑到那段，所以 CI 也是裝進 `.venv` 而不是 runner 的 Python。
+
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m playwright install chromium        # E2E 需要
+
+.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
+curl 127.0.0.1:8000/health                              # key 讀到了嗎
+
+.venv/bin/python -m unittest discover -s tests -t .     # 全部
+.venv/bin/python -m unittest tests.test_workflow        # 單一檔案
+.venv/bin/python -m unittest tests.test_app.Translations.test_every_language_the_group_reads_is_produced
+
+.venv/bin/python scripts/build_macos_app.py             # 建 Lecture.app（僅 macOS）
+```
+
+用 `unittest`，不是 pytest——pytest 沒有裝。專案沒有 linter、formatter 或 type checker，CI 只跑測試。
+
+## 一堂課的資料流
+
+`app.py` 是單一檔案（約 1,200 行），整條管線都在裡面：
+
+瀏覽器送 16kHz PCM 進 `/ws` → 後端另開一條 WebSocket 到 Gemini Transcribe Live → 逐字稿累積 → 每 `NOTE_WINDOW_SECONDS`（60 秒）叫一次 Gemini Flash 產出一段 note block → 每累積 `ROLLUP_EVERY_BLOCKS`（10 段）壓成一個章節摘要 → 下課時把章節摘要加上未整併的段落做最終整併 → 整併成功後翻成四種語言。
+
+Gemini 的連線每 `SESSION_ROTATE_SECONDS`（570 秒）主動輪替，因為它本身有時間上限（ADR 0003）。輪替期間錄音不中斷。
+
+重試分三層，因為三種呼叫的失敗代價不同：`LIVE_RETRY_DELAYS` 很快放棄（逐字稿還在，補不到那段筆記不致命）、`FINAL_RETRY_DELAYS` 等到 120 秒（整併是最貴也最不能丟的一次）、`BACKGROUND_RETRY_DELAYS` 用分鐘級間隔在瀏覽器關掉之後繼續試。
+
+## 兩條寫入路徑
+
+這是最容易誤判的地方。最終筆記有兩條產生路徑，改動任何一條都要想到另一條：
+
+1. websocket 下課收尾
+2. `POST /finalize/{session_id}` 重新整併——使用者手動按，或 `retry_finalize_in_background()` 在背景重試
+
+兩條都必須經過 `session_lock(session_id)` 與 `publish_final_notes()`。沒有這把鎖的話，手動重整併成功之後，一次晚到的失敗會把 fallback 蓋回去；背景重試也會在等到鎖之後重跑一次已經成功的整併（所以 `skip_if_merged` 的檢查必須在**取得鎖之後**）。
+
+`finalize_input.json` 在整併開始前就寫好，重跑因此不需要 websocket（ADR 0002）。
+
+## 幾個不變量
+
+- **譯本不得比正本舊。** `is_current()` 比對 mtime，比 `final_notes.md` 舊的譯本不進下載連結、不進 ZIP、`/download` 直接 404。刪除舊譯本只是盡力而為（唯讀檔會讓 `unlink` 失敗），把關的是時間戳（ADR 0006）。
+- **OpenCC (`s2tw`) 套用在逐字稿與筆記，不套用在譯本。** 課程名稱也轉。
+- **更正是指示，手寫筆記是素材。** 更正累積成清單注入三個 prompt 並宣告「衝突時以更正為準」；手寫筆記由後端原文附加在 `USER_NOTES_HEADING` 底下，不交給模型轉述（ADR 0005）。
+- **翻譯是整併之後獨立的一步。** 不併進 `final_prompt`，整併失敗時完全跳過（ADR 0006）。
+- **摘要的 thinking 固定壓到最低。** Gemini 的 thought token 計入 `maxOutputTokens`，預設等級會把預算吃光、回傳空正文；`thinkingLevel: minimal` 寫死在 `SUMMARY_GENERATION_CONFIG`，它不保證完全不思考，換 `SUMMARY_MODEL` 前要先確認新模型接受它（ADR 0008）。
+- 一天一個資料夾：`lectures/YYYYMMDD/HHMMSS/`（ADR 0004）。`lectures/` 被 `.gitignore` 擋住，裡面是真實課堂內容。
+
+決策理由都在 `docs/adr/`。改到相關行為時一併更新對應的 ADR。
+
+## 測試
+
+測試從不呼叫真實服務。`tests/fakes.py` 提供 `fake_services()`（假的 Gemini Live socket + 假的 Gemini generateContent transport）給 workflow 與 E2E 用。
+
+三個容易踩的坑，都實際發生過：
+
+- **新的測試類別必須 `patch.object(app, "GEMINI_API_KEY", "test-key")`。** 沒 patch 的話，本機因為 `.env` 有真 key 會全綠，CI 沒有 key 則在碰到 mock transport 之前就 `RuntimeError`。
+- **判斷翻譯請求是哪個語言，要讀 prompt 的第一行。** prompt 內文含有 "Leave English technical terms in English"，子字串比對會讓每個語言都命中 English。
+- **不要拿 `app.BUNDLE_FILES` 當 ZIP 測試的期望值。** 那個常數就是 ZIP 的定義，拿它比對自己，從常數裡刪掉一個檔案測試照樣會過。要明列檔名。
+
+## 前端
+
+`static/` 底下是原生 HTML/CSS/JS，沒有建置步驟，改完重新整理即可。`renderDownloads()` 以 `labels` 這個 map 決定顯示哪些下載項目與順序——後端回傳了但 `labels` 沒有的 key 會被靜默略過。視覺與狀態機的規範在 `DESIGN.md`。
+
+=================== docs/adr/0001-stream-anthropic-summaries.md
+# 1. 以 streaming 呼叫 Anthropic Messages API
+
+## Status
+
+Accepted（2026-09-08）。2026-10-20 起摘要端點改為 Gemini（ADR 0008）：串流讀取的決定沿用，SSE 的事件形狀、例外名稱與測試 fixture 隨之更換，下文的 Anthropic 細節自此只是歷史紀錄。
+
+## Context
+
+2026-09-08 一堂 48 分鐘的課，37 個逐塊筆記與 3 次章節整併全部成功，只有最後一次整併失敗，`final_notes.md` 落成 fallback：
+
+```
+最終整併失敗：RuntimeError: Anthropic 摘要請求失敗（ConnectError），已嘗試 4 次。
+```
+
+`server.log` 顯示第一次是 `ReadTimeout`，後三次是 `ConnectError`。當天網路本身有問題：ping api.anthropic.com 的 RTT avg 735ms、max 1598ms、stddev 589ms，第一次 TCP connect 花了 7.17 秒，同一時段多個 MCP server 也 DNS 解析失敗。
+
+事後用同一份素材重跑，input 5437 tokens、output 5064 tokens，耗時 68.3 秒。原本的呼叫是非 streaming，`httpx.AsyncClient(timeout=180)` 的 read timeout 必須一口氣涵蓋整段生成。在回應完成前，一個 byte 都不會到。逐塊筆記輸出短、幾秒就回來，所以撐得過去；最終整併要連續生成 5000 個 token，網路慢個兩三倍就爆掉。
+
+失敗落在最長的那次呼叫上不是巧合。輸出越長，越撐不過那個 180 秒。
+
+## Decision
+
+改用 `stream: true`，以 `client.stream()` 讀 SSE，逐事件累積 `content_block_delta` 的文字。timeout 改成 `httpx.Timeout(connect=15, read=120, write=60, pool=30)`。
+
+`stop_reason` 改從 `message_delta` 事件讀取，維持原本的 `max_tokens` 截斷偵測。SSE 中途出現 `error` 事件（例如 `overloaded_error`）以 `AnthropicStreamError` 表示，納入可重試的例外。
+
+## Consequences
+
+read timeout 從「整段生成的預算」變成「兩個 chunk 之間的預算」，同樣寫 120 秒，容錯遠高於原本的 180 秒。串流中途斷線會拋 `RemoteProtocolError`，屬於 `TransportError`，自動落入既有的重試路徑。
+
+負面與代價：
+
+- SSE 解析是自己寫的，比讀一個 JSON 物件多了會出錯的地方。事件型別（`text_delta` 與 `thinking_delta`）判斷錯就會靜默吐出錯誤內容。
+- 沒有整體時間上限。`read` 只管相鄰 chunk 的間隔，理論上一個一直緩慢吐字的回應可以拖很久，實務上由 `max_tokens` 收斂。
+- 重試時累積的文字必須重置，否則斷線重試會把前半段接兩次。這裡靠 `stream_anthropic_message()` 每次呼叫都建自己的 buffer 來保證，而不是靠記得清空。測試 `test_dropped_stream_is_retried_without_duplicating_partial_text` 守住這件事。
+- 所有測試 fixture 從 JSON 改成 SSE，`tests/fakes.py` 多了 `sse()` 與 `stream_response()`。
+
+=================== docs/adr/0002-final-merge-recovery.md
+# 2. 最終整併失敗後的復原路徑
+
+## Status
+
+Accepted（2026-09-08）
+
+## Context
+
+最終整併失敗時，原本的行為是把章節摘要與未整併筆記原樣寫進 `final_notes.md`，附上錯誤訊息。素材沒丟，但沒有任何重跑的路徑。要救回來只能手動撈檔案、自己拼 prompt、自己呼叫 API。2026-09-08 那次就是這樣救的。
+
+這裡其實有兩種不同的失效情境，各自需要不同的東西：
+
+- server 還活著，只是當下網路不通。此時可以在背景繼續重試。
+- 使用者下課後直接關機。server 進程一起死，背景重試救不到，只能等下次開 app。
+
+只做其中一個就會留下漏洞。
+
+## Decision
+
+整併前先把素材寫成 `finalize_input.json`（`course_title`、`chapters`、`remaining`），不管整併成功與否都寫。整併結果記在 `session.json` 的 `final_notes_status` 欄位（`ok` / `failed`）。
+
+在這之上提供三條路徑：
+
+- `POST /finalize/{session_id}` 重跑整併，覆寫 `final_notes.md` 並把狀態改回 `ok`。
+- 整併失敗時 spawn 背景 task，依 `BACKGROUND_RETRY_DELAYS`（60、300、900 秒）重試，成功即停。
+- `GET /sessions/incomplete` 列出狀態為 `failed` 且素材還在的課。前端載入時查詢，顯示「重新整併」按鈕。
+
+前端在完整筆記面板也常駐一顆「重新整併」按鈕，成功的課也能按。重跑一次的成本很低，而筆記品質不滿意想重生成是合理需求。
+
+## Consequences
+
+重跑讀的是 `finalize_input.json`，不是去 parse 自己產生的 `final_notes.md`。這一點刻意為之：parse 自己輸出的 markdown 是脆弱的耦合，使用者手動編輯過筆記就會爛掉。代價是每堂課多一個檔案。
+
+背景重試的節奏（60 / 300 / 900 秒，總共約 21 分鐘後放棄）是猜的，沒有數據支撐。放棄後狀態仍是 `failed`，下次開 app 會提示，所以猜錯的後果有限。
+
+其他負面：
+
+- `spawn_background_finalize()` 建立的 task 必須存進 module-level 的 `_background_tasks`，否則會被 GC 回收。這是 asyncio 的已知陷阱，測試 `test_spawned_task_is_referenced_so_it_is_not_garbage_collected` 守住它。
+- 背景重試在 websocket 關閉後才跑，前端收不到結果通知，只有檔案會更新。
+- `POST /finalize/{session_id}` 沒有任何認證。server 綁在 127.0.0.1，目前可接受。
+
+=================== docs/adr/0003-gemini-keepalive-window.md
+# 3. 放寬 Gemini Live 的 keepalive 期限
+
+## Status
+
+Accepted（2026-09-08）
+
+## Context
+
+同一天稍晚，語音辨識反覆中斷。`server.log` 出現 6 次：
+
+```
+websockets.exceptions.ConnectionClosedError: sent 1011 (internal error) keepalive ping timeout
+```
+
+`sent 1011` 表示是我們這端主動判定連線已死並關閉，不是 Google 把連線踢掉。原本設定 `ping_interval=20, ping_timeout=20`，送出 ping 後 20 秒內沒收到 pong 就重連。
+
+問題在於 keepalive ping 跟音訊 frame 排在同一個 send queue。瀏覽器每 85ms 送一個 chunk，base64 編碼後約 4KB，穩定佔用約 47KB/s 上行。上行一慢，音訊就積壓，ping frame 被推到佇列尾端。pong 遲到的原因是排隊延遲，不只是 RTT。
+
+而且會自我惡化：上行越塞，ping 越晚送出，越容易 timeout；斷線重連期間音訊繼續在 queue 累積，重連後一次灌出去，更塞。
+
+## Decision
+
+`ping_interval` 20 → 30 秒，`ping_timeout` 20 → 60 秒，兩者都改由環境變數 `GEMINI_PING_INTERVAL_SECONDS` 與 `GEMINI_PING_TIMEOUT_SECONDS` 控制。
+
+## Consequences
+
+真正斷掉的連線要多花大約 40 秒才會被偵測到並重連，這段時間的逐字稿會掉。這是刻意的取捨：誤判健康連線的代價（每次斷線都掉一段逐字稿，而且在爛網路下反覆發生）高於延後偵測真正斷線的代價。
+
+錄音不受影響。`wav_file.writeframesraw(data)` 在 `audio_queue.put()` 之前執行，也不看 `asr_failed` 旗標，所以就算 ASR 完全掛掉，`lecture.wav` 仍然完整，事後永遠能從音檔重跑逐字稿。
+
+`audio_queue` 的 maxsize 500 約等於 42 秒緩衝，重連 backoff 最多 6 秒，所以重連期間的音訊不會掉。但若斷線超過 42 秒，`audio_queue.put()` 會阻塞接收迴圈，連帶讓 wav 寫入落後。
+
+順帶修掉 `finally` 區塊沒有取回 receiver task 例外的問題。原本只在 task 未完成時才 `await`，已完成且帶例外的 task 就沒人收，asyncio 會把整段 traceback 印進 log。診斷時最難讀的就是這段雜訊。
+
+=================== docs/adr/0004-one-folder-per-day.md
+# 4. 一天一個資料夾的儲存佈局
+
+## Status
+
+Accepted（2026-09-08）
+
+## Context
+
+原本每次錄音在 `lectures/` 底下各開一個資料夾，名稱是 `YYYYMMDD_HHMMSS`。
+
+2026-09-08 那天暴露了問題。一堂 09:03–11:00 的課因為連線不穩被切成四段，`lectures/` 底下就多了四個並排的資料夾，彼此看不出關係：
+
+```text
+lectures/
+├── 20260908_090321/
+├── 20260908_101248/
+├── 20260908_101551/
+└── 20260908_102416/
+```
+
+從檔名看不出這四段是同一堂課，也看不出哪幾天有課。連續上幾週之後，這個目錄會變成幾十個平鋪的資料夾。
+
+另一個需求是整理過的當日筆記。把四段合併成一份可複習的 HTML 之後，那份檔案沒有地方放。擺在 `lectures/` 第一層會跟錄音資料夾混在一起。
+
+## Decision
+
+改成兩層：日期資料夾在外，每次錄音的時間資料夾在內。
+
+```text
+lectures/20260908/090321/lecture.wav
+lectures/20260908/20260908_上午.HTML
+```
+
+`session_id` 維持 `YYYYMMDD_HHMMSS` 不變，只是不再直接當成目錄名。新的 `session_dir_for()` 負責把它拆成兩段路徑，`session_paths()` 呼叫它，其餘所有讀寫都經過 `session_paths()`。
+
+整理過的當日筆記放在日期資料夾的第一層，跟各段錄音並列。
+
+## Consequences
+
+`session_id` 同時是磁碟路徑和 URL 識別碼。這次只改前者，所以 `/download/{session_id}/{filename}` 和 `/finalize/{session_id}` 的網址形式沒變，前端、`session.json` 的欄位語意、既有的路徑驗證正則全部不用動。改動因此收斂成一個新函式。
+
+`/sessions/incomplete` 是全專案唯一直接掃目錄、不經過 `session_paths()` 的地方，它的 glob 從 `*/session.json` 改成 `*/*/session.json`，session_id 的 fallback 也要從一層目錄名改成兩層拼接。這種「唯一的例外」在改佈局時最容易漏掉。
+
+負面與代價：
+
+- **既有資料要手動搬移。** 程式不會自動遷移舊佈局，舊資料夾在新版本下讀不到，`/download` 會回 404。這次是手動 `mv` 處理的。
+- 路徑多一層，`cd` 進去多打一次。
+- 一天只錄一次課的時候，外層資料夾只包一個子資料夾，看起來有點多餘。
+- 日期資料夾的第一層混放整理後的筆記與錄音子資料夾，兩種東西的層級相同但性質不同。替代方案是再開一層 `notes/`，但那會讓最常開的檔案多藏一層。
+
+=================== docs/adr/0005-human-corrections-steer-the-summaries.md
+# 5. 使用者更正以指示的形式注入後續生成
+
+## Status
+
+Accepted
+
+## Context
+
+摘要管線原本是單向的：逐字稿 → 逐段筆記 → 章節摘要 → 最終整併。使用者在課堂上看得到
+筆記寫錯了（ASR 把專有名詞認錯、模型誤解了老師的說法），卻沒有任何地方可以更正。
+
+更糟的是錯誤會傳染。`rollup_prompt` 讀的是逐段筆記，`final_prompt` 讀的是章節摘要，所以
+一段寫錯的筆記會被壓縮、再被整併，一路帶進最終筆記，而且沿途看起來愈來愈像定論。
+
+要讓使用者能修正，有兩種做法：
+
+1. **重跑寫錯的那一段**：給每個 note block 一個 id，使用者指定要重寫哪一段，重新呼叫一次
+   Anthropic。畫面上立刻修好。
+2. **把更正當成指示注入下游**：更正累積成一份清單，跟著素材一起往下游傳，在每一次生成時
+   要求模型「與更正衝突時以更正為準」。
+
+## Decision
+
+採用第 2 種。更正是**指示**，不是素材。
+
+送出的更正累積在 session 的 `corrections` list，透過 `corrections_block()` 注入三處 prompt：
+`lecture_note_prompt`、`rollup_prompt`、`final_prompt`。清單為空時完全不出現，既有 prompt
+一個字都不變。
+
+更正一併寫進 `finalize_input.json`，所以「重新整併」重跑時仍然生效。
+
+與之並行的另一條通道是**手寫筆記**（`user_notes`）：那是素材，作為最高優先的內容交給
+模型整合，並額外由 `append_user_notes_section()` 在後端原文附加到 `final_notes.md` 末尾。
+原文那一段刻意不請模型照抄 —— 程式拼接才能保證一字不漏。
+
+## Consequences
+
+好處：
+
+- 不必為 note block 建立身分，不必管「某一段正在重跑」的狀態。
+- 一次更正對之後**所有**生成有效，不用逐段修。
+- 不增加 API 呼叫次數；更正只是 prompt 裡多幾行。
+- 更正在最終整併時才真正發揮作用，而最終筆記正是使用者要複習的東西。
+
+代價：
+
+- **已經顯示在畫面上的錯誤不會當場消失。** 使用者按下更正後，看到的仍是那段錯的筆記，
+  要到下課整併後才修好。`live_notes.md` 會永久保留錯的原文與下方的更正。
+- 更正是否被遵守取決於模型。沒有機制能驗證輸出真的照做了。
+- 更正清單會隨課堂長度單調成長，每一次生成都要付它的 input token。一堂課累積數十條更正時
+  成本不可忽略，且會稀釋 prompt 中其他指示的注意力。
+- 更正沒有作用範圍。寫「這裡指的是 X」時，模型不知道「這裡」是哪裡。
+
+=================== docs/adr/0006-translate-the-final-notes-as-a-separate-step.md
+# 6. 最終筆記的翻譯獨立成一步
+
+## Status
+
+Accepted
+
+## Context
+
+這個 App 的筆記一直只有繁體中文一種輸出。但課是分組進行的，組員裡有讀不懂中文的人，
+他們拿到 `final_notes.md` 等於拿到一份看不懂的檔案。
+
+最初考慮的是把整個 App 做成 i18n：介面、逐字稿、筆記全部可切語言。盤點後發現那要動
+`index.html` 約 80 處文案、`app.js` 的 53 條字串，還要把 `OpenCC("s2tw")` 拆成逐語言的
+轉換策略。而真正要解決的問題只有一個：讓組員讀得懂最後那份摘要。其餘都是順帶做的。
+
+翻譯要放在哪裡，有兩種做法：
+
+1. **併進 `final_prompt`**：要求模型在同一次呼叫裡輸出三種語言。
+2. **整併完成後另外呼叫**：`final_notes.md` 落地之後，每種語言各跑一次翻譯。
+
+## Decision
+
+採用第 2 種，並且在整併失敗時完全跳過翻譯。
+
+最終整併是整條管線裡最貴、最不能失敗的一次呼叫，`FINAL_RETRY_DELAYS` 等到 120 秒就是
+為了它。把三種語言塞進同一次輸出會讓它更長、更容易被截斷，而且一失敗就是三種語言一起
+沒有。拆開之後，翻譯失敗只損失譯本，繁中正本已經在磁碟上了。
+
+`write_translations()` 逐語言 try/except，而且**包住整段產出流程**（API 呼叫、寫 MD、
+render HTML），不是只包 API。只包 API 的話，寫檔失敗會往上冒，整堂課收不到 `saved`，
+連 `session.json` 都不會建立。
+
+一種語言失敗時，該語言磁碟上既有的譯本會被刪掉。留著的話，那是「已經被取代的那份筆記」
+的譯本，交給組員當成最新版比沒有更糟。刪除本身也包在隔離裡，而且逐檔各自 try：`unlink`
+不只會丟 `FileNotFoundError`，唯讀檔會丟 `PermissionError`，而 MD 刪不掉不該連帶讓 HTML
+也留下。
+
+但「刪不掉就算了」不能等於「那就繼續當成有效輸出」。所以真正的把關不是刪除成功與否，而是
+時間戳：`is_current()` 規定譯本的 mtime 不得早於 `final_notes.md`，比正本舊的一律不進
+下載連結、不進 ZIP、直接打 404。刪除只是盡力而為，不變量由時間戳維持。
+
+整併失敗時 `final_notes.md` 裡只有 fallback 殘骸，翻譯它要付費又沒人讀得下去，所以跳過；
+背景重試整併成功後會補上。
+
+「重新整併」同樣重跑翻譯。下課收尾與重新整併走同一把 per-session lock——使用者可以在下課
+翻譯還在跑的時候去按「重新整併」，放著交錯的話，磁碟上會出現「繁中是 B 版、譯本是 A 版」。
+背景重試的「已經成功就跳過」判斷放在**取得 lock 之後**：它可能一直在等手動那次跑完，
+等到的時候狀態早就變了。lock 以引用計數回收，不然一台開幾週的本機 server 會每堂課留一把。
+
+下載連結由 `download_links()` 依磁碟實際檔案產生，websocket 與 `/finalize` 共用同一份。
+首次整併失敗、之後重跑成功時，補出來的譯本才會出現在下載面板上。
+
+## Consequences
+
+一堂課多四次 Anthropic 呼叫。實測整併後的筆記約 5,000 token，一種語言是輸入 5,000 +
+輸出 5,000，Haiku 費率下約 US$0.03，四種語言約 US$0.12。
+
+翻譯品質沒有自動把關。模型可能漏掉一個項目、把英文術語也翻掉，而沒有人會發現——繁中
+正本在旁邊，但不會有人逐條比對。這是這個決定最實在的代價。
+
+語言清單寫死在 `TRANSLATION_LANGUAGES`：英文、德文、波蘭文、拉丁美洲西班牙文。加語言要
+改 code。這是照組員實際讀什麼決定的，不是可設定的偏好；哪天組員換了再改。
+
+dict 的 key 同時是檔名後綴，所以西班牙文的檔案是 `final_notes.es.md` 而不是
+`final_notes.es-419.md`。但 HTML 的 `lang` 屬性要的是真正的 BCP-47 標籤，差異寫在
+`HTML_LANG` 這個對照表裡。少了它，螢幕閱讀器與拼字檢查會當成歐洲西班牙文處理。
+
+下課後的收尾變慢：四次翻譯串行跑完才送出 `saved`。這是這個決定目前最明顯的代價，四種
+語言已經到了該改成並行、或讓譯本在背景補的邊緣。
+
+背景重試補出來的譯本不會出現在當下開著的頁面上。背景整併成功後沒有任何管道通知瀏覽器，
+面板會停在下課當時的七個連結，少掉八個譯本連結。重新整理也沒用——頁面不會回頭載入已完成
+session 的下載面板，只有手動按一次「重新整併」才會重建。
+
+這是既有行為（背景整併成功後，畫面上的筆記內容本來就不會更新），這次只是把缺的東西從
+「內容過期」擴大成「另外還少八個連結」。檔案本身都在磁碟上，ZIP 也拿得到。要真的修，
+得加輪詢或推播，那是另一件事。
+
+=================== docs/adr/0007-phone-reaches-the-mac-through-tailscale-serve.md
+# 7. 手機透過 Tailscale Serve 連回 Mac，前端做成 PWA
+
+## Status
+
+Accepted
+
+## Context
+
+到目前為止，錄音一定得在跑 server 的那台電腦上進行。可是上課時手邊最方便的是手機（Android）：
+收音位置可以往講台靠，也不必為了錄音把筆電打開一整堂課。
+
+要讓手機用這個 App，得先解決三個限制：
+
+1. **麥克風只能在 secure context 裡開。** `getUserMedia` 只在 HTTPS 或 localhost 上可用。
+   手機連 `http://192.168.x.x:8000` 時，瀏覽器會直接拒絕要麥克風。
+2. **server 沒有任何驗證。** 它一直只聽 `127.0.0.1`，所以不需要驗證。只要改聽 `0.0.0.0`，
+   同一個 Wi-Fi 上的任何人都能用這台機器上的 Gemini／Anthropic key，也能下載課堂內容。
+   偏偏上課用的正是學校 Wi-Fi 這種共用網路。
+3. **學校 Wi-Fi 常開 client isolation。** 就算手機跟 Mac 在同一個網路，也可能互相連不到。
+
+評估過三種做法：
+
+1. **mkcert + 區網 + token**：自簽 CA，把根憑證裝進手機並開啟信任；server 改聽 `0.0.0.0`，
+   每個端點（包含 `/ws` 與 `/download`）都要加 token 驗證。這解決了 1 跟 2，解決不了 3，
+   而且驗證要自己寫、自己維護。
+2. **部署到雲端**：跟「全部跑在使用者自己的機器上」的前提衝突，API key 和課堂內容都得放上
+   別人的主機，驗證同樣要自己寫。
+3. **Tailscale Serve**：Mac 與手機都加入同一個 tailnet，`tailscale serve` 用 `*.ts.net`
+   的正式憑證提供 HTTPS，轉給 `127.0.0.1:8000`。
+
+## Decision
+
+採用 Tailscale Serve。server 維持只聽 `127.0.0.1`，後端不改。
+
+選它是因為三個限制它一次全解決，而且都不是靠我們自己寫的程式碼：憑證是 Let's Encrypt
+簽的，手機不用裝 CA；連得到的只有 tailnet 裡的裝置，存取控制交給 Tailscale 的 ACL；
+連線走 WireGuard，client isolation 擋不住，Mac 放在家裡也連得到。
+
+前端做成 PWA，安裝到 Android 主畫面，打開就是全螢幕，沒有網址列：
+
+- `manifest.webmanifest` 與 192／512／maskable 圖示。圖示由 `scripts/icon.svg` 產生，
+  用的是 `scripts/build_pwa_icons.py`，產出的 PNG 提交進 repo。
+- service worker **只攔截頁面導覽**。server 回得了就一律用 server 的回應；連不上
+  （Mac 睡著、server 沒開、Tailscale 斷線）才改回一張預先快取的 `offline.html`，
+  告訴使用者問題出在哪一端。「連不上」有兩種樣子：`fetch()` 失敗，或是一直開著的
+  `tailscale serve` 替掛掉的 server 回 502／503／504。這個 App 自己從不在頁面導覽時回這三個
+  狀態碼，所以兩種都當成連不上處理。頁面導覽一律用 `cache: "no-cache"` 向 server 確認，
+  因為 `StaticFiles` 沒送 `Cache-Control`，瀏覽器的 HTTP cache 會在 server 掛掉時拿出舊的
+  `index.html`。`app.js`、`styles.css`、API、`/download`、`/bundle` 都不經過 service worker。這個 App 的一切都要靠 server 才能做，快取頁面外殼只會製造「看起來能用、按下去才失敗」
+  的狀況，還會讓舊版 `app.js` 卡在手機上。
+- 錄音期間持有 Screen Wake Lock。手機螢幕自動關閉時瀏覽器可能暫停頁面，收音就會中斷。
+  頁面切到背景時瀏覽器會自動釋放鎖，回到前景時要重新取得。
+
+## Consequences
+
+多了一個外部依賴。Mac 和手機都得安裝並登入 Tailscale，tailnet 也要在管理後台開啟
+MagicDNS 與 HTTPS Certificates。Tailscale 帳號出問題時，手機就不能用了（Mac 本機照常）。
+
+手機上的網址是 `https://<mac 名稱>.<tailnet>.ts.net`，不是 `127.0.0.1:8000`。PWA 綁的是
+origin，所以 Mac 改名或換 tailnet 後得重新安裝。`tailscale serve` 也固定轉到 8000，
+launcher 拿不到 8000 而改用隨機 port 時（見 #3），手機就連不到。
+
+2026-09-29 在 Android 實機上驗證過：經由 `tailscale serve` 安裝 PWA、錄音、逐字稿、
+下課整併都正常。那次測試沒有量頻寬，也沒有確認連線是直連還是走 DERP relay。音訊是
+16 kHz 16-bit mono，約 32 KB/s，走 relay 應該也撐得住，但這只是推估。自動化測試仍然只跑
+localhost。
+
+Mac 必須從上課一路醒到整併完成。server、最終整併、背景重試都在 Mac 上，所有檔案也存在
+Mac 上，手機上一個都沒有。MacBook 闔上螢幕就會睡著，就算接著電源也一樣。
+
+手機網路一抖，這堂課就結束了。現行設計下 WebSocket 斷線等於下課：server 會用已經收到的內容
+收尾整併，前端顯示「連線已中斷」。手機在 Wi-Fi 與行動網路之間切換、或 Tailscale 重新連線，
+都會觸發這個狀況。要支援斷線續錄，得改 session 模型，這不在這次的範圍。
+
+Wake Lock 只能讓螢幕不關，擋不住使用者自己切到別的 App。Android Chrome 在背景是否持續收音，
+沒有實測過；README 請使用者錄音時讓 App 留在前景。
+
+service worker 只快取一張 `offline.html`。更新提示頁內容時要改 `sw.js` 裡的快取名稱，
+不然已安裝的手機會一直顯示舊版提示頁。
+
+=================== docs/adr/0008-summaries-move-to-gemini.md
+# 8. 筆記、章節與翻譯改走 Gemini 端點
+
+## Status
+
+Accepted（2026-10-20）
+
+## Context
+
+這個 App 一直用兩家服務：Gemini Transcribe Live 做即時語音辨識，Anthropic 的 Claude Haiku 4.5 做逐段筆記、章節摘要、最終整併與翻譯。代價是兩把 key、兩張帳單、兩套錯誤碼與重試規則，README 也得教人申請兩次。使用者要求整個專案改用 Gemini 端點。
+
+改之前先用專案裡那把 key 實際探了一輪（2026-10-20）：
+
+- `GET /v1beta/models` 列出 63 個模型。文字生成可用的 Flash 層級有 `gemini-2.5-flash`、`gemini-3.5-flash`、`gemini-3.5-flash-lite`、`gemini-3.6-flash`、`gemini-3.7-flash`、`gemini-3.8-flash` 等。
+- 打 `gemini-3.5-flash` 的 `streamGenerateContent`，回應的 `modelVersion` 是 `gemini-3.6-flash`。這個名字是別名，實際服務的模型會換。
+- 預設有 thinking，而且 thought token 計入 `maxOutputTokens`。給 64 token 的預算，60 個被 thinking 用掉，回 `finishReason: MAX_TOKENS`，正文是空字串。一個三句話的提示，thinking 用了 652 token，正文只有 114。
+- `thinkingConfig.thinkingLevel: "minimal"` 與 `thinkingBudget: 0` 在 `gemini-3.5-flash` 上都被接受，那個一句話的提示 thought token 都歸零。`gemini-3.8-flash` 對 `minimal` 回 400：「Thinking level MINIMAL is not supported for this model」。
+- 官方定價頁沒有列 `gemini-3.5-flash`。`gemini-3.6-flash` 與 `gemini-3.8-flash` 同價：每百萬 token 輸入 US$0.75、輸出 US$3.75，到 2026-12-31 為止；2027 年起 US$1.50 與 US$7.50。
+- 串流格式：`alt=sse` 時每個 `data:` 行是一份完整的 `GenerateContentResponse`，正文在 `candidates[0].content.parts[].text`，`finishReason` 只掛在最後一個 chunk，而最後一個 chunk 的 part 是空字串加 `thoughtSignature`。整個請求失敗時是帶 HTTP 狀態碼的 `{"error": {"code", "message", "status"}}`。
+
+## Decision
+
+摘要、章節、整併與翻譯全部改打 `POST /v1beta/models/{SUMMARY_MODEL}:streamGenerateContent?alt=sse`，預設模型 `gemini-3.5-flash`。
+
+仍然用 httpx 直打 REST，不引進 `google-genai` SDK。ASR 那條本來就是自己開 websocket，測試靠 `httpx.MockTransport` 攔請求，換 SDK 等於把 fake 也重寫一次。ADR 0001 的串流決定沿用：`read` timeout 管的還是相鄰 chunk 的間隔，不是整段生成。
+
+key 放 `x-goog-api-key` header，不放 query string。錯誤訊息與 log 會帶 URL，query string 裡的 key 會跟著進去。
+
+`generationConfig` 固定為 `maxOutputTokens: 16384` 加 `thinkingConfig.thinkingLevel: "minimal"`。把 thinking 壓到最低的理由有三個：Haiku 時期本來就沒有 reasoning 步驟，筆記品質不是靠它撐的；thought token 以輸出價計費，上面那個 652 對 114 的比例會讓每分鐘一次的呼叫貴好幾倍；它還會吃掉輸出預算。`minimal` 不等於零：Google 的文件說模型仍可能視請求思考，實測歸零的只是一句話的提示。上限從 8,192 提到 16,384，就是給它還是想了一點的情況留空間，最終整併的 5,000 token 正文也遠在限制之下。
+
+完成判定看 `finishReason`。`MAX_TOKENS` 是截斷，報錯不當成完整筆記。`STOP` 才算正常結束。最後一個 chunk 一定帶 finishReason，所以已經收到正文、串流卻在沒有它的情況下乾淨地結束，表示中間被切掉了，視為 `GeminiStreamError` 走重試。其他值（`SAFETY`、`RECITATION`、`OTHER`……）表示模型中途停了，已經收到的半截正文一樣丟掉報錯，而且不重試，因為同樣的輸入再送一次結果通常相同。chunk 裡帶 `error` 的情況視為可重試（`GeminiStreamError`），對應原本 Anthropic 的 `overloaded_error` 事件。帶 `thought: true` 的 part 跳過，對應原本的 `thinking_delta`。
+
+可重試的 HTTP 狀態碼是 429、500、502、503、504。529 拿掉，那是 Anthropic 的碼。
+
+`ANTHROPIC_API_KEY` 整個移除。原本「`.env` 優先於 shell 環境變數」的規則是為它寫的，現在搬到 `GEMINI_API_KEY` 上，理由不變：shell 裡留著一把舊 key 時，專案設定不該被它蓋掉。`/health` 與 `session.json` 的 `summary_provider` 改成 `gemini`，`summary_api_key_configured` 欄位刪除。
+
+## Consequences
+
+一把 key、一張帳單。README 少掉一整節申請流程。
+
+負面與代價：
+
+- thinking 等級寫死在 `SUMMARY_GENERATION_CONFIG`。把 `SUMMARY_MODEL` 換成不接受 `minimal` 的模型（2026-10-20 的 `gemini-3.8-flash` 就是）會每次都收到 400，400 不重試，每一段筆記都會落成逐字稿 fallback。換模型前得先用 curl 探一次。
+- `gemini-3.5-flash` 是會飄的別名。`session.json` 記的是設定裡的名字，不是 `modelVersion`，所以同一個名字在不同日期可能是不同模型，回頭比較筆記品質時要記得這件事。
+- 三個 prompt 是對著 Haiku 調的，這次一字未改。筆記的風格、長度與表格使用習慣可能變，要上幾堂課才知道要不要重調。
+- 費用估算要重做。ADR 0006 用 Haiku 費率算出的翻譯成本已不適用；README 的 48 分鐘課堂 token 數也是 Haiku tokenizer 算的，換模型後會有出入。
+- 舊課堂的 `session.json` 不回填，`summary_provider: "anthropic"` 留在歷史資料裡。
+- 上面的探測都只是一次性的 curl，不是測試。模型清單、別名指向、定價與 `minimal` 的支援情況都會變，本文記的是 2026-10-20 當天的觀察。
+
+=================== app.py constants
+NOTE_WINDOW_SECONDS = int(os.getenv("NOTE_WINDOW_SECONDS", "60"))
+ROLLUP_EVERY_BLOCKS = int(os.getenv("ROLLUP_EVERY_BLOCKS", "10"))
+SESSION_ROTATE_SECONDS = int(os.getenv("SESSION_ROTATE_SECONDS", "570"))
+GEMINI_FINALIZE_GRACE_SECONDS = float(os.getenv("GEMINI_FINALIZE_GRACE_SECONDS", "1.5"))
+# Keepalive pings queue behind audio frames, so a congested uplink delays the pong rather than
+# the network dropping. A 20s deadline kept closing healthy sessions (1011 keepalive ping timeout).
+GEMINI_PING_INTERVAL_SECONDS = int(os.getenv("GEMINI_PING_INTERVAL_SECONDS", "30"))
+GEMINI_PING_TIMEOUT_SECONDS = int(os.getenv("GEMINI_PING_TIMEOUT_SECONDS", "60"))
+
+# Live note blocks fail cheaply (the transcript fallback keeps the material), so they give up fast
+# rather than stalling the note worker. The final merge is the expensive one to lose, so it waits.
+LIVE_RETRY_DELAYS = (2, 4, 8)
+FINAL_RETRY_DELAYS = (5, 15, 45, 120)
+BACKGROUND_RETRY_DELAYS = (60, 300, 900)
+# Responses are streamed, so `read` bounds the gap between chunks rather than the whole generation.
+STREAM_TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=60.0, pool=30.0)

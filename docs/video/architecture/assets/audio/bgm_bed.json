@@ -1,0 +1,12 @@
+{
+  "source": "assets/audio/bgm-seed7.mp3",
+  "slice_s": [
+    28.0,
+    59.0
+  ],
+  "crossfade_s": 5.0,
+  "seam_score": 0.0127,
+  "bed_lufs_before_duck": -28.0,
+  "eq": "highpass 40 Hz, -3 dB @ 1.4 kHz (2.2 oct)",
+  "duck": "sidechaincompress threshold 0.03 ratio 6 attack 40 release 600"
+}

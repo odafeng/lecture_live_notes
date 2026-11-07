@@ -1,0 +1,551 @@
+<template>
+  <style>
+    @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+    @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+    @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+    @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      --paper: #F0EBDE;
+      --ink: #1F2BE0;
+      --ink-soft: #5560E5;
+      --grid: rgba(31, 43, 224, 0.10);
+      --ink-faint: rgba(31, 43, 224, 0.18);
+      --f-display: "Newsreader", "Noto Serif TC", serif;
+      --f-body: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+      --f-mono: "DM Mono", "Noto Sans TC", monospace;
+    }
+
+    /* full-bleed ground: paper + permanent graph grid + hairlines + page chrome */
+    .c07-ground {
+      position: absolute;
+      inset: 0;
+      container-type: size;
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 2cqw 2cqw;
+    }
+    .c07-hair {
+      position: absolute;
+      left: 4cqw;
+      right: 4cqw;
+      height: 0.12cqw;
+      background: var(--ink);
+    }
+    .c07-hair-top { top: 3cqw; }
+    .c07-hair-bot { top: 53.13cqw; }
+    .c07-chrome {
+      position: absolute;
+      top: 51.3cqw;
+      font-family: var(--f-mono);
+      font-size: 0.78cqw;
+      letter-spacing: 0.06em;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .c07-chrome-l { left: 4cqw; }
+    .c07-chrome-r { right: 4cqw; }
+
+    /* stage: all frame content, positioned in cqw (px / 19.2) */
+    .c07-stage {
+      position: absolute;
+      inset: 0;
+      container-type: size;
+      color: var(--ink);
+    }
+    .c07-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100cqw;
+      height: 56.25cqw;
+      overflow: visible;
+    }
+
+    /* top bar */
+    .c07-layer {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 5cqw;
+      font-family: var(--f-mono);
+      font-size: 1.4cqw;
+      letter-spacing: 0.06em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .c07-title {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 7.1cqw;
+      font-family: var(--f-display);
+      font-weight: 600;
+      font-size: 4.6cqw;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .c07-rule {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 13.44cqw;
+      width: 68.75cqw;
+      height: 0.12cqw;
+      background: var(--ink);
+    }
+
+    /* left column: need / design cards */
+    .c07-label {
+      position: absolute;
+      left: 4.1667cqw;
+      font-family: var(--f-body);
+      font-weight: 600;
+      font-size: 1.4cqw;
+      letter-spacing: 0.18em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .c07-lede {
+      position: absolute;
+      left: 4.1667cqw;
+      width: 28.125cqw;
+      font-family: var(--f-body);
+      font-weight: 400;
+      font-size: 1.75cqw;
+      line-height: 1.4;
+    }
+    .c07-src {
+      position: absolute;
+      left: 4.1667cqw;
+      font-family: var(--f-mono);
+      font-size: 1.4cqw;
+      letter-spacing: 0.04em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .c07-divider {
+      position: absolute;
+      left: 4.1667cqw;
+      top: 28.39cqw;
+      width: 28.125cqw;
+      height: 0.06cqw;
+      background: var(--ink-faint);
+    }
+
+    /* bottom-row cards on the main stage */
+    .c07-card {
+      position: absolute;
+      top: 38.02cqw;
+      height: 6.77cqw;
+      background: var(--paper);
+      border: 0.12cqw solid var(--ink);
+    }
+    .c07-card-name {
+      position: absolute;
+      left: 0.94cqw;
+      top: 0.83cqw;
+      font-family: var(--f-body);
+      font-weight: 600;
+      font-size: 2.1cqw;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .c07-card-tag {
+      position: absolute;
+      right: 0.94cqw;
+      top: 1.15cqw;
+      padding: 0.2cqw 0.5cqw;
+      border: 0.12cqw solid var(--ink);
+      font-family: var(--f-mono);
+      font-size: 1.4cqw;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .c07-card-art {
+      position: absolute;
+      left: 0.94cqw;
+      top: 4.2cqw;
+      width: 12cqw;
+      height: 1.9cqw;
+      overflow: visible;
+    }
+
+    /* scene-4 rule with marker underline */
+    .c07-ruletext {
+      position: absolute;
+      left: 56.25cqw;
+      top: 25.1cqw;
+      width: 16.667cqw;
+      text-align: center;
+      font-family: var(--f-mono);
+      font-size: 1.6cqw;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .c07-mh-wrap {
+      position: relative;
+      display: inline-block;
+    }
+    .c07-mh-text {
+      position: relative;
+      z-index: 1;
+    }
+    .c07-mh-svg {
+      position: absolute;
+      left: -0.3cqw;
+      bottom: -0.55cqw;
+      width: calc(100% + 0.6cqw);
+      height: 0.9cqw;
+      z-index: 0;
+      overflow: visible;
+    }
+
+    /* scene-5 annotations */
+    .c07-note {
+      position: absolute;
+      font-family: var(--f-mono);
+      font-size: 1.4cqw;
+      letter-spacing: 0.04em;
+      line-height: 1.25;
+      white-space: nowrap;
+      text-align: right;
+    }
+    .c07-note-junction { right: 7.03cqw; top: 25.42cqw; }
+    .c07-note-bypass { right: 7.19cqw; top: 33.2cqw; }
+  </style>
+
+  <div id="root" data-composition-id="07-corrections" data-start="0" data-duration="15.32" data-width="1920" data-height="1080">
+
+    <!-- track 0: full-bleed ground -->
+    <div class="clip c07-ground" data-start="0" data-duration="15.32" data-track-index="0">
+      <div class="c07-hair c07-hair-top"></div>
+      <div class="c07-hair c07-hair-bot"></div>
+      <div class="c07-chrome c07-chrome-l">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="c07-chrome c07-chrome-r">07 / 10</div>
+    </div>
+
+    <!-- track 1: the shot -->
+    <div class="clip c07-stage" data-start="0" data-duration="15.32" data-track-index="1">
+
+      <!-- geometry layer (viewBox = canvas px) -->
+      <svg class="c07-svg" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+
+        <!-- ===== minimap (STAGE §4) ===== -->
+        <g id="07-corrections-minimap" data-layout-allow-overlap>
+          <rect x="1440" y="96" width="400" height="170" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+          <rect x="1450" y="88" width="82" height="16" fill="#F0EBDE" />
+          <text x="1454" y="101" font-family="DM Mono, Noto Sans TC, monospace" font-size="15" fill="#1F2BE0" letter-spacing="0.9">架構位置</text>
+
+          <!-- dashed "your computer" box -->
+          <rect x="1561.2" y="130" width="127.6" height="123.2" fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.2" stroke-dasharray="4 3" />
+
+          <!-- faint base: links -->
+          <g fill="none" stroke="rgba(31,43,224,0.18)" stroke-width="1.6">
+            <path d="M1530.4 171.8 L1583.2 171.8" />
+            <path d="M1666.8 163 L1697.6 163 L1697.6 132.2 L1728.4 132.2" />
+            <path d="M1666.8 180.6 L1697.6 180.6 L1697.6 211.4 L1728.4 211.4" />
+            <path d="M1625 191.6 L1625 213.6" />
+          </g>
+          <!-- faint base: boxes -->
+          <g fill="#F0EBDE" stroke="rgba(31,43,224,0.18)" stroke-width="1.6">
+            <rect x="1460" y="156.4" width="70.4" height="30.8" />
+            <rect x="1583.2" y="152" width="83.6" height="39.6" />
+            <rect x="1592" y="213.6" width="66" height="26.4" />
+            <rect x="1728.4" y="116.8" width="92.4" height="30.8" />
+            <rect x="1728.4" y="196" width="92.4" height="30.8" />
+          </g>
+          <g font-family="DM Mono, Noto Sans TC, monospace" font-size="13" fill="rgba(31,43,224,0.45)" text-anchor="middle" dominant-baseline="central">
+            <text x="1495.2" y="171.8">瀏覽器</text>
+            <text x="1625" y="171.8">FastAPI</text>
+            <text x="1625" y="226.8">磁碟</text>
+            <text x="1774.6" y="132.2">Live</text>
+            <text x="1774.6" y="211.4">Flash</text>
+          </g>
+
+          <!-- lit overlays: browser, browser→server, server, server⇄flash, flash -->
+          <g id="07-corrections-mm-browser">
+            <rect x="1460" y="156.4" width="70.4" height="30.8" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="1.6" />
+            <text x="1495.2" y="171.8" font-family="DM Mono, Noto Sans TC, monospace" font-size="13" fill="#F0EBDE" text-anchor="middle" dominant-baseline="central">瀏覽器</text>
+          </g>
+          <path id="07-corrections-mm-l1" d="M1530.4 171.8 L1583.2 171.8" fill="none" stroke="#1F2BE0" stroke-width="2.4" />
+          <g id="07-corrections-mm-server">
+            <rect x="1583.2" y="152" width="83.6" height="39.6" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="1.6" />
+            <text x="1625" y="171.8" font-family="DM Mono, Noto Sans TC, monospace" font-size="13" fill="#F0EBDE" text-anchor="middle" dominant-baseline="central">FastAPI</text>
+          </g>
+          <path id="07-corrections-mm-l2" d="M1666.8 180.6 L1697.6 180.6 L1697.6 211.4 L1728.4 211.4" fill="none" stroke="#1F2BE0" stroke-width="2.4" />
+          <g id="07-corrections-mm-flash">
+            <rect x="1728.4" y="196" width="92.4" height="30.8" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="1.6" />
+            <text x="1774.6" y="211.4" font-family="DM Mono, Noto Sans TC, monospace" font-size="13" fill="#F0EBDE" text-anchor="middle" dominant-baseline="central">Flash</text>
+          </g>
+        </g>
+
+        <!-- ===== main stage: three-node contagion chain ===== -->
+        <g font-family="Hanken Grotesk, Noto Sans TC, sans-serif" font-weight="700" font-size="34" text-anchor="middle" dominant-baseline="central">
+          <g id="07-corrections-n1">
+            <rect x="755" y="340" width="250" height="110" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="880" y="395" fill="#1F2BE0">段落筆記</text>
+          </g>
+          <g id="07-corrections-n2">
+            <rect x="1115" y="340" width="250" height="110" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="1240" y="395" fill="#1F2BE0">章節摘要</text>
+          </g>
+          <g id="07-corrections-n3">
+            <rect x="1475" y="340" width="250" height="110" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="1600" y="395" fill="#1F2BE0">最終筆記</text>
+          </g>
+        </g>
+
+        <!-- thin arrows (before the error compounds) -->
+        <g id="07-corrections-thin1">
+          <path d="M1009 395 L1101 395" fill="none" stroke="#1F2BE0" stroke-width="2.3" />
+          <polygon points="1112,395 1100,388 1100,402" fill="#1F2BE0" />
+        </g>
+        <g id="07-corrections-thin2">
+          <path d="M1369 395 L1461 395" fill="none" stroke="#1F2BE0" stroke-width="2.3" />
+          <polygon points="1472,395 1460,388 1460,402" fill="#1F2BE0" />
+        </g>
+        <!-- thick arrows (5.0s: the error rides the pipeline) -->
+        <path id="07-corrections-thick1" class="c07-draw" d="M1009 395 L1094 395" fill="none" stroke="#1F2BE0" stroke-width="8" />
+        <polygon id="07-corrections-thick1h" points="1113,395 1093,383 1093,407" fill="#1F2BE0" />
+        <path id="07-corrections-thick2" class="c07-draw" d="M1369 395 L1454 395" fill="none" stroke="#1F2BE0" stroke-width="8" />
+        <polygon id="07-corrections-thick2h" points="1473,395 1453,383 1453,407" fill="#1F2BE0" />
+
+        <!-- error markers (cobalt square with an ×), one per node, growing as they travel -->
+        <g transform="translate(1005 340)">
+          <g id="07-corrections-m1">
+            <rect x="-18" y="-18" width="36" height="36" fill="#1F2BE0" stroke="#F0EBDE" stroke-width="3" />
+            <path d="M-8 -8 L8 8 M8 -8 L-8 8" fill="none" stroke="#F0EBDE" stroke-width="4" />
+          </g>
+          <g id="07-corrections-c1">
+            <rect x="-18" y="-18" width="36" height="36" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="3" />
+            <path class="c07-check" d="M-9 0 L-3 7 L10 -8" fill="none" stroke="#1F2BE0" stroke-width="4" />
+          </g>
+        </g>
+        <g transform="translate(1365 340)">
+          <g id="07-corrections-m2">
+            <rect x="-18" y="-18" width="36" height="36" fill="#1F2BE0" stroke="#F0EBDE" stroke-width="3" />
+            <path d="M-8 -8 L8 8 M8 -8 L-8 8" fill="none" stroke="#F0EBDE" stroke-width="4" />
+          </g>
+          <g id="07-corrections-c2">
+            <rect x="-18" y="-18" width="36" height="36" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="3" />
+            <path class="c07-check" d="M-9 0 L-3 7 L10 -8" fill="none" stroke="#1F2BE0" stroke-width="4" />
+          </g>
+        </g>
+        <g transform="translate(1725 340)">
+          <g id="07-corrections-m3">
+            <rect x="-18" y="-18" width="36" height="36" fill="#1F2BE0" stroke="#F0EBDE" stroke-width="3" />
+            <path d="M-8 -8 L8 8 M8 -8 L-8 8" fill="none" stroke="#F0EBDE" stroke-width="4" />
+          </g>
+          <g id="07-corrections-c3">
+            <rect x="-18" y="-18" width="36" height="36" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="3" />
+            <path class="c07-check" d="M-9 0 L-3 7 L10 -8" fill="none" stroke="#1F2BE0" stroke-width="4" />
+          </g>
+        </g>
+
+        <!-- ===== prompt chips (aligned under each node) ===== -->
+        <g font-family="DM Mono, monospace" font-size="27" text-anchor="middle" dominant-baseline="central">
+          <g id="07-corrections-p1" data-layout-allow-overlap>
+            <rect x="712" y="562" width="336" height="58" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="880" y="591" fill="#1F2BE0">lecture_note_prompt</text>
+          </g>
+          <g id="07-corrections-p1lit" data-layout-allow-overlap>
+            <rect x="712" y="562" width="336" height="58" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="880" y="591" fill="#F0EBDE">lecture_note_prompt</text>
+          </g>
+          <g id="07-corrections-p2" data-layout-allow-overlap>
+            <rect x="1120" y="562" width="240" height="58" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="1240" y="591" fill="#1F2BE0">rollup_prompt</text>
+          </g>
+          <g id="07-corrections-p2lit" data-layout-allow-overlap>
+            <rect x="1120" y="562" width="240" height="58" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="1240" y="591" fill="#F0EBDE">rollup_prompt</text>
+          </g>
+          <g id="07-corrections-p3" data-layout-allow-overlap>
+            <rect x="1489" y="562" width="222" height="58" fill="#F0EBDE" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="1600" y="591" fill="#1F2BE0">final_prompt</text>
+          </g>
+          <g id="07-corrections-p3lit" data-layout-allow-overlap>
+            <rect x="1489" y="562" width="222" height="58" fill="#1F2BE0" stroke="#1F2BE0" stroke-width="2.3" />
+            <text x="1600" y="591" fill="#F0EBDE">final_prompt</text>
+          </g>
+        </g>
+
+        <!-- correction lines: correction card → each prompt chip -->
+        <path id="07-corrections-L1" class="c07-draw" d="M880 728 L880 634" fill="none" stroke="#1F2BE0" stroke-width="3" />
+        <polygon id="07-corrections-L1h" points="880,622 872,636 888,636" fill="#1F2BE0" />
+        <path id="07-corrections-L2" class="c07-draw" d="M990 728 L990 690 L1240 690 L1240 634" fill="none" stroke="#1F2BE0" stroke-width="3" />
+        <polygon id="07-corrections-L2h" points="1240,622 1232,636 1248,636" fill="#1F2BE0" />
+        <path id="07-corrections-L3" class="c07-draw" d="M1060 728 L1060 708 L1600 708 L1600 634" fill="none" stroke="#1F2BE0" stroke-width="3" />
+        <polygon id="07-corrections-L3h" points="1600,622 1592,636 1608,636" fill="#1F2BE0" />
+
+        <!-- bypass line: handwritten notes → straight under 最終筆記, around every prompt -->
+        <path id="07-corrections-B" class="c07-draw" d="M1742 795 L1795 795 L1795 478 L1600 478 L1600 464" fill="none" stroke="#1F2BE0" stroke-width="3" />
+        <polygon id="07-corrections-Bh" points="1600,452 1592,466 1608,466" fill="#1F2BE0" />
+      </svg>
+
+      <!-- top bar -->
+      <div id="07-corrections-layer" class="c07-layer">LAYER 05 / 07</div>
+      <div id="07-corrections-title" class="c07-title">人的修正</div>
+      <div id="07-corrections-rule" class="c07-rule"></div>
+
+      <!-- left column: need card -->
+      <div id="07-corrections-needlabel" class="c07-label" style="top: 17.19cqw;">需求</div>
+      <div id="07-corrections-needtext" class="c07-lede" style="top: 19.53cqw;">模型會寫錯，<br>錯誤還會一路傳下去。</div>
+      <div id="07-corrections-divider" class="c07-divider"></div>
+      <!-- left column: design card -->
+      <div id="07-corrections-designlabel" class="c07-label" style="top: 30.21cqw;">設計</div>
+      <div id="07-corrections-designtext" class="c07-lede" style="top: 32.55cqw;">更正是指示；<br>手寫筆記是素材。</div>
+      <div id="07-corrections-designsrc" class="c07-src" style="top: 38.8cqw;">corrections_block() · ADR 0005</div>
+
+      <!-- bottom row: correction card (instruction) -->
+      <div id="07-corrections-corrcard" class="c07-card" style="left: 39.32cqw; width: 17.71cqw;">
+        <div class="c07-card-name">更正</div>
+        <div class="c07-card-tag">指示</div>
+        <svg class="c07-card-art" viewBox="0 0 230 36" preserveAspectRatio="xMinYMid meet">
+          <rect x="0" y="2" width="8" height="8" fill="#1F2BE0" />
+          <rect x="16" y="3" width="200" height="6" fill="#1F2BE0" />
+          <rect x="0" y="15" width="8" height="8" fill="#1F2BE0" />
+          <rect x="16" y="16" width="150" height="6" fill="#1F2BE0" />
+          <rect x="0" y="28" width="8" height="8" fill="#1F2BE0" />
+          <rect x="16" y="29" width="176" height="6" fill="#1F2BE0" />
+        </svg>
+      </div>
+
+      <!-- bottom row: handwritten-notes card (material) -->
+      <div id="07-corrections-handcard" class="c07-card" style="left: 73.96cqw; width: 16.67cqw;">
+        <div class="c07-card-name">手寫筆記</div>
+        <div class="c07-card-tag">素材</div>
+        <svg class="c07-card-art" viewBox="0 0 230 36" preserveAspectRatio="xMinYMid meet">
+          <path d="M0 9 Q12 1 24 9 T48 9 T72 9 T96 9 T120 9 T144 9 T168 9 T192 9" fill="none" stroke="#1F2BE0" stroke-width="3" />
+          <path d="M0 28 Q12 20 24 28 T48 28 T72 28 T96 28 T120 28 T144 28" fill="none" stroke="#1F2BE0" stroke-width="3" />
+        </svg>
+      </div>
+
+      <!-- scene 4: conflict rule above the chip row, marker underline -->
+      <div id="07-corrections-ruletext" class="c07-ruletext">
+        <span class="c07-mh-wrap">
+          <span class="c07-mh-text">衝突時以更正為準</span>
+          <svg class="c07-mh-svg" viewBox="0 0 500 24" preserveAspectRatio="none">
+            <path id="07-corrections-scribble" d="M0,12 Q31,0 62,12 Q93,24 125,12 Q156,0 187,12 Q218,24 250,12 Q281,0 312,12 Q343,24 375,12 Q406,0 437,12 Q468,24 500,12" fill="none" stroke="#1F2BE0" stroke-width="4" />
+          </svg>
+        </span>
+      </div>
+
+      <!-- scene 5: annotations on the bypass line -->
+      <div id="07-corrections-junction" class="c07-note c07-note-junction">## 我的課堂筆記（原文）</div>
+      <div id="07-corrections-nomodel" class="c07-note c07-note-bypass">不經模型</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        var FRAME = "07-corrections";
+        var root = document.querySelector('[data-composition-id="' + FRAME + '"]');
+        function q(id) { return root.querySelector('[id="' + FRAME + "-" + id + '"]'); }
+        function qa(ids) { return ids.map(q); }
+
+        // svg-path-draw setup: measured lengths, dash fully offset
+        root.querySelectorAll(".c07-draw, .c07-check").forEach(function (p) {
+          var len = p.getTotalLength() * 1.02;
+          p.style.strokeDasharray = len + " " + len;
+          p.style.strokeDashoffset = String(len);
+        });
+        var scribble = q("scribble");
+        var sLen = scribble.getTotalLength();
+        gsap.set(scribble, { strokeDasharray: sLen, strokeDashoffset: sLen });
+
+        var tl = gsap.timeline({ paused: true });
+        var E = "power3.out";
+
+        function rise(el, at, dur, dy) {
+          tl.fromTo(el, { opacity: 0, y: dy == null ? 14 : dy }, { opacity: 1, y: 0, duration: dur || 0.6, ease: E }, at);
+        }
+        function pop(el, at, dur) {
+          tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: dur || 0.25, ease: "power1.out" }, at);
+        }
+
+        // ---- Scene 1 (0.0–2.1): top bar + minimap; three nodes, no error yet
+        tl.fromTo(q("minimap"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 0);
+        rise(q("layer"), 0.05, 0.5, 10);
+        rise(q("title"), 0.15, 0.6, 16);
+        tl.fromTo(q("rule"), { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.7, ease: E }, 0.25);
+        tl.fromTo(qa(["mm-browser", "mm-l1", "mm-server", "mm-l2", "mm-flash"]),
+          { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power1.out", stagger: 0.12 }, 0.8);
+        rise(q("n1"), 1.0, 0.6);
+        rise(q("n2"), 1.25, 0.6);
+        rise(q("n3"), 1.5, 0.6);
+        tl.fromTo(q("thin1"), { opacity: 0 }, { opacity: 0.45, duration: 0.35, ease: "power1.out" }, 1.7);
+        tl.fromTo(q("thin2"), { opacity: 0 }, { opacity: 0.45, duration: 0.35, ease: "power1.out" }, 1.9);
+
+        // ---- Scene 2 (2.2–6.0): need card; error appears, travels, grows
+        rise(q("needlabel"), 2.2, 0.5, 10);
+        rise(q("needtext"), 2.35, 0.6);
+        gsap.set(qa(["m1", "m2", "m3", "c1", "c2", "c3"]), { transformOrigin: "50% 50%" });
+        tl.fromTo(q("m1"), { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: E }, 2.2);
+        // 3.2 "被壓縮": a copy leaves node 1 and lands on node 2, larger
+        tl.fromTo(q("m2"), { opacity: 0, x: -360, scale: 1 }, { opacity: 1, duration: 0.05, ease: "none" }, 3.2);
+        tl.to(q("m2"), { x: 0, scale: 1.4, duration: 0.6, ease: E }, 3.22);
+        // 4.2 "再被整併": on to node 3, larger again
+        tl.fromTo(q("m3"), { opacity: 0, x: -360, scale: 1.4 }, { opacity: 1, duration: 0.05, ease: "none" }, 4.2);
+        tl.to(q("m3"), { x: 0, scale: 1.8, duration: 0.6, ease: E }, 4.22);
+        // 5.0 arrows turn into thick solid lines (svg-path-draw)
+        tl.to(qa(["thin1", "thin2"]), { opacity: 0, duration: 0.3, ease: "power1.out" }, 5.0);
+        tl.to(q("thick1"), { strokeDashoffset: 0, duration: 0.45, ease: "power2.out" }, 5.0);
+        tl.fromTo(q("thick1h"), { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "power1.out" }, 5.38);
+        tl.to(q("thick2"), { strokeDashoffset: 0, duration: 0.45, ease: "power2.out" }, 5.34);
+        tl.fromTo(q("thick2h"), { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "power1.out" }, 5.72);
+
+        // ---- Scene 3 (6.1–9.3): design card; corrections injected into three prompts
+        tl.fromTo(q("divider"), { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.6, ease: E }, 6.05);
+        rise(q("designlabel"), 6.1, 0.5, 10);
+        rise(q("designtext"), 6.25, 0.6);
+        rise(q("designsrc"), 6.6, 0.5, 10);
+        rise(q("corrcard"), 6.3, 0.6, 18);
+        rise(q("p1"), 6.8, 0.5, 10);
+        rise(q("p2"), 6.95, 0.5, 10);
+        rise(q("p3"), 7.1, 0.5, 10);
+        tl.to(q("L1"), { strokeDashoffset: 0, duration: 0.45, ease: "power2.out" }, 7.9);
+        pop(q("L1h"), 8.32, 0.12);
+        pop(q("p1lit"), 8.38, 0.3);
+        tl.to(q("L2"), { strokeDashoffset: 0, duration: 0.55, ease: "power2.out" }, 8.25);
+        pop(q("L2h"), 8.77, 0.12);
+        pop(q("p2lit"), 8.83, 0.3);
+        tl.to(q("L3"), { strokeDashoffset: 0, duration: 0.6, ease: "power2.out" }, 8.65);
+        pop(q("L3h"), 9.22, 0.12);
+        pop(q("p3lit"), 9.26, 0.3);
+
+        // ---- Scene 4 (9.4–11.0): conflict rule + marker underline; errors deleted (scale-swap)
+        rise(q("ruletext"), 9.4, 0.5, 10);
+        tl.to(scribble, { strokeDashoffset: 0, duration: 0.8, ease: "power1.inOut" }, 9.7);
+        // outgoing: error markers rush away
+        tl.to(q("m1"), { scale: 0.7, opacity: 0, duration: 0.35, ease: "power2.in" }, 9.9);
+        tl.to(q("m2"), { scale: 0.98, opacity: 0, duration: 0.35, ease: "power2.in" }, 9.9);
+        tl.to(q("m3"), { scale: 1.26, opacity: 0, duration: 0.35, ease: "power2.in" }, 9.9);
+        // incoming: corrected state, same origin, on top, long-tail ease (no overshoot per STAGE §6)
+        tl.fromTo(qa(["c1", "c2", "c3"]), { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.55, ease: E }, 10.1);
+        tl.to(root.querySelectorAll(".c07-check"), { strokeDashoffset: 0, duration: 0.35, ease: "power2.out" }, 10.4);
+
+        // ---- Scene 5 (11.1–14.82): handwritten notes bypass every prompt
+        rise(q("handcard"), 11.1, 0.6, 18);
+        tl.to(q("B"), { strokeDashoffset: 0, duration: 1.0, ease: "power2.out" }, 11.6);
+        pop(q("Bh"), 12.5, 0.15);
+        rise(q("junction"), 12.7, 0.5, 10);
+        rise(q("nomodel"), 13.3, 0.5, 10);
+
+        // hold to the end of the frame
+        tl.set({}, {}, 14.82);
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines[FRAME] = tl;
+      })();
+    </script>
+  </div>
+</template>

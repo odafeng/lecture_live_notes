@@ -1,0 +1,470 @@
+<template>
+  <!--
+    02-overview: full-size canonical architecture diagram (STAGE.md §3).
+    OFFSET NOTE: the whole diagram is shifted UP uniformly by 40px (dy = -40) so the thesis
+    line fits above y≈896, per the packet ("把架構圖整體上移到 y 160 起"). Every STAGE §3
+    y-coordinate below is (STAGE y − 40); x is unchanged. Frame 10 should apply the same
+    dy = -40 if it also needs the bottom band, or use STAGE §3 as written.
+      雲端 label y≈160 · live 200–340 · server 360–540 · browser 380–520 · flash 560–700
+      disk 640–760 · 你的電腦 dashed frame 260–820 · thesis line 838–891
+  -->
+  <div
+    id="root"
+    data-composition-id="02-overview"
+    data-start="0"
+    data-duration="11.25"
+    data-width="1920"
+    data-height="1080"
+  >
+    <style>
+      @font-face { font-family: "Newsreader";     src: url("../../assets/fonts/Newsreader-400.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-400.woff2") format("woff2"); font-weight: 100 549; }
+      @font-face { font-family: "Hanken Grotesk"; src: url("../../assets/fonts/HankenGrotesk-600.woff2") format("woff2"); font-weight: 550 900; }
+      @font-face { font-family: "DM Mono";        src: url("../../assets/fonts/DMMono-400.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Noto Serif TC";  src: url("../../assets/fonts/NotoSerifTC-600.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-500.woff2") format("woff2"); font-weight: 100 599; }
+      @font-face { font-family: "Noto Sans TC";   src: url("../../assets/fonts/NotoSansTC-700.woff2") format("woff2"); font-weight: 600 900; }
+
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        container-type: size;
+      }
+
+      [data-composition-id="02-overview"] {
+        --paper: #F0EBDE;
+        --ink: #1F2BE0;
+        --ink-soft: #5560E5;
+        --grid: rgba(31, 43, 224, 0.10);
+        --ink-faint: rgba(31, 43, 224, 0.18);
+        --display: "Newsreader", "Noto Serif TC", serif;
+        --body: "Hanken Grotesk", "Noto Sans TC", sans-serif;
+        --mono: "DM Mono", "Noto Sans TC", monospace;
+        /* 1 canvas px in container units (px ÷ 1920 × 100 = cqw) */
+        --u: calc(100cqw / 1920);
+      }
+
+      /* full-bleed ground: paper + permanent graph-paper grid */
+      [data-composition-id="02-overview"] .bg {
+        position: absolute;
+        inset: 0;
+        background-color: var(--paper);
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 2cqw 2cqw;
+      }
+
+      /* pixel-glitch column — left, low opacity, stair-stepped, below everything else */
+      [data-composition-id="02-overview"] .glitch {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: calc(240 * var(--u));
+        height: 100%;
+        opacity: 0.14;
+      }
+      [data-composition-id="02-overview"] .glitch .step {
+        position: absolute;
+        left: 0;
+        top: calc(var(--t) * var(--u));
+        height: calc(var(--h) * var(--u));
+        width: calc(var(--w) * var(--u));
+        background-image: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 8px);
+      }
+
+      [data-composition-id="02-overview"] .stage {
+        position: absolute;
+        inset: 0;
+        container-type: size;
+        color: var(--ink);
+      }
+
+      /* furniture */
+      [data-composition-id="02-overview"] .hairline {
+        position: absolute;
+        left: 4cqw;
+        right: 4cqw;
+        height: 0.12cqw;
+        background: var(--ink);
+      }
+      [data-composition-id="02-overview"] .hairline.top { top: 3cqw; }
+      [data-composition-id="02-overview"] .hairline.bottom { bottom: 3cqw; }
+      [data-composition-id="02-overview"] .chrome {
+        position: absolute;
+        bottom: 3.6cqw;
+        font-family: var(--mono);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        color: var(--ink);
+      }
+      [data-composition-id="02-overview"] .chrome.left { left: 4cqw; }
+      [data-composition-id="02-overview"] .chrome.right { right: 4cqw; }
+
+      /* Scene 1 — title block (left axis x=120, shared with browser box + thesis) */
+      [data-composition-id="02-overview"] .kicker {
+        position: absolute;
+        left: calc(120 * var(--u));
+        top: calc(80 * var(--u));
+        font-family: var(--body);
+        font-weight: 600;
+        font-size: 0.833cqw;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        line-height: 1.2;
+      }
+      [data-composition-id="02-overview"] .title {
+        position: absolute;
+        left: calc(120 * var(--u));
+        top: calc(102 * var(--u));
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 2.4cqw;
+        line-height: 1.15;
+        letter-spacing: -0.005em;
+        white-space: nowrap;
+      }
+      [data-composition-id="02-overview"] .counter {
+        position: absolute;
+        right: calc(160 * var(--u));
+        top: calc(114 * var(--u));
+        font-family: var(--mono);
+        font-size: 1.4cqw;
+        letter-spacing: 0.05em;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+
+      /* diagram wires (SVG in canvas px space) */
+      [data-composition-id="02-overview"] .wires {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      [data-composition-id="02-overview"] .wires .line {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 2.3;
+        stroke-linecap: butt;
+        stroke-linejoin: miter;
+      }
+      [data-composition-id="02-overview"] .wires .dashed {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 2.3;
+        stroke-dasharray: 11.5 7.7;
+      }
+      [data-composition-id="02-overview"] .wires .head { fill: var(--ink); }
+
+      /* boxes (STAGE §2 default style: paper + 0.12cqw cobalt border + cobalt text) */
+      [data-composition-id="02-overview"] .box {
+        position: absolute;
+        left: calc(var(--x) * var(--u));
+        top: calc(var(--y) * var(--u));
+        width: calc(var(--w) * var(--u));
+        height: calc(var(--h) * var(--u));
+        box-sizing: border-box;
+        border: 0.12cqw solid var(--ink);
+        background: var(--paper);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: calc(6 * var(--u));
+        text-align: center;
+        transform-origin: 50% 50%;
+      }
+      [data-composition-id="02-overview"] .box .name {
+        font-family: var(--body);
+        font-weight: 600;
+        font-size: 1.55cqw;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+      [data-composition-id="02-overview"] .box .role {
+        font-family: var(--body);
+        font-weight: 500;
+        font-size: 1.4cqw;
+        line-height: 1.25;
+        white-space: nowrap;
+        margin-top: calc(-4 * var(--u));
+      }
+      [data-composition-id="02-overview"] .box .sub {
+        font-family: var(--mono);
+        font-size: 0.95cqw;
+        letter-spacing: 0.02em;
+        line-height: 1.3;
+        color: var(--ink-soft);
+        white-space: nowrap;
+      }
+
+      /* mono tags: 你的電腦 legend, 雲端, wire labels */
+      [data-composition-id="02-overview"] .tag {
+        position: absolute;
+        font-family: var(--mono);
+        font-size: 1.4cqw;
+        letter-spacing: 0.05em;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+      [data-composition-id="02-overview"] .tag.legend {
+        left: calc(596 * var(--u));
+        top: calc(243 * var(--u));
+        padding: 0 calc(10 * var(--u));
+        background: var(--paper);
+      }
+      [data-composition-id="02-overview"] .tag.cloud {
+        left: calc(1340 * var(--u));
+        top: calc(146 * var(--u));
+        width: calc(420 * var(--u));
+        text-align: center;
+      }
+      [data-composition-id="02-overview"] .tag.ws {
+        left: calc(440 * var(--u));
+        top: calc(402 * var(--u));
+        width: calc(240 * var(--u));
+        text-align: center;
+      }
+      [data-composition-id="02-overview"] .tag.to-live {
+        left: calc(1266 * var(--u));
+        top: calc(352 * var(--u));
+      }
+      [data-composition-id="02-overview"] .tag.to-flash {
+        left: calc(1266 * var(--u));
+        top: calc(512 * var(--u));
+      }
+
+      /* Scene 4 — thesis line, per-phrase reveal + css-marker underlines */
+      [data-composition-id="02-overview"] .thesis {
+        position: absolute;
+        left: calc(120 * var(--u));
+        top: calc(838 * var(--u));
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 2.3cqw;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+      [data-composition-id="02-overview"] .thesis .ch { display: inline-block; }
+      [data-composition-id="02-overview"] .thesis .mark {
+        position: relative;
+        display: inline-block;
+      }
+      [data-composition-id="02-overview"] .thesis .bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 0.1em;
+        background: var(--ink);
+        transform-origin: 0% 50%;
+      }
+    </style>
+
+    <!-- track 0: full-bleed ground (paper + grid) with the low-opacity pixel-glitch -->
+    <div class="clip bg" data-start="0" data-duration="11.25" data-track-index="0">
+      <div class="glitch">
+        <div class="step" style="--t:0;--h:190;--w:60"></div>
+        <div class="step" style="--t:190;--h:160;--w:150"></div>
+        <div class="step" style="--t:350;--h:210;--w:230"></div>
+        <div class="step" style="--t:560;--h:130;--w:110"></div>
+        <div class="step" style="--t:690;--h:130;--w:190"></div>
+        <div class="step" style="--t:820;--h:260;--w:50"></div>
+      </div>
+    </div>
+
+    <!-- track 1: the stage -->
+    <div class="clip stage" id="02-overview-stage" data-start="0" data-duration="11.25" data-track-index="1">
+      <div class="hairline top"></div>
+      <div class="hairline bottom"></div>
+      <div class="chrome left">LECTURE LIVE NOTES · ARCHITECTURE</div>
+      <div class="chrome right">02 / 10</div>
+
+      <div class="kicker" id="02-overview-kicker">ARCHITECTURE</div>
+      <div class="title" id="02-overview-title">Lecture Live Notes</div>
+      <div class="counter" id="02-overview-counter">5 個方塊</div>
+
+      <svg class="wires" viewBox="0 0 1920 1080" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <mask id="02-overview-pen-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1920" height="1080">
+            <!-- the pen: a solid stroke that reveals the dashed frame as it is drawn -->
+            <path id="02-overview-pen" d="M 580 260 H 1160 V 820 H 580 Z" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="square" />
+          </mask>
+        </defs>
+
+        <!-- 你的電腦: dashed frame x 580–1160, y 260–820 (svg-path-draw through the mask) -->
+        <path class="dashed" d="M 580 260 H 1160 V 820 H 580 Z" mask="url(#02-overview-pen-mask)" />
+
+        <!-- server → disk (x=870, 540 → 640) -->
+        <path class="line" id="02-overview-w-disk" d="M 870 540 V 627" />
+        <polygon class="head" id="02-overview-h-disk" points="870,640 863,626 877,626" />
+
+        <!-- browser → server (y=450, 440 → 680) -->
+        <path class="line" id="02-overview-w-ws" d="M 440 450 H 667" />
+        <polygon class="head" id="02-overview-h-ws" points="680,450 666,443 666,457" />
+
+        <!-- server ⇄ live: (1060,410) → elbow x=1250 → (1340,270) -->
+        <path class="line" id="02-overview-w-live" d="M 1073 410 H 1250 V 270 H 1327" />
+        <polygon class="head" id="02-overview-h-live-a" points="1060,410 1074,403 1074,417" />
+        <polygon class="head" id="02-overview-h-live-b" points="1340,270 1326,263 1326,277" />
+
+        <!-- server ⇄ flash: (1060,490) → elbow x=1250 → (1340,630) -->
+        <path class="line" id="02-overview-w-flash" d="M 1073 490 H 1250 V 630 H 1327" />
+        <polygon class="head" id="02-overview-h-flash-a" points="1060,490 1074,483 1074,497" />
+        <polygon class="head" id="02-overview-h-flash-b" points="1340,630 1326,623 1326,637" />
+      </svg>
+
+      <div class="tag legend" id="02-overview-legend">你的電腦</div>
+      <div class="tag cloud" id="02-overview-cloud">雲端</div>
+      <div class="tag ws" id="02-overview-t-ws">/ws 音訊</div>
+      <div class="tag to-live" id="02-overview-t-live">音訊 → 逐字稿</div>
+      <div class="tag to-flash" id="02-overview-t-flash">prompt → 筆記</div>
+
+      <!-- the five boxes (STAGE §3 coordinates, dy = -40) -->
+      <div class="box" id="02-overview-server" style="--x:680;--y:360;--w:380;--h:180">
+        <div class="name">FastAPI 伺服器</div>
+        <div class="sub">app.py · /ws</div>
+      </div>
+      <div class="box" id="02-overview-disk" style="--x:720;--y:640;--w:300;--h:120">
+        <div class="name">磁碟</div>
+        <div class="sub">lectures/YYYYMMDD/HHMMSS/</div>
+      </div>
+      <div class="box" id="02-overview-browser" style="--x:120;--y:380;--w:320;--h:140">
+        <div class="name">瀏覽器／手機</div>
+        <div class="sub">PWA · 16kHz PCM</div>
+      </div>
+      <div class="box" id="02-overview-live" style="--x:1340;--y:200;--w:420;--h:140">
+        <div class="name">Gemini Live</div>
+        <div class="role">（即時語音辨識）</div>
+        <div class="sub">WebSocket</div>
+      </div>
+      <div class="box" id="02-overview-flash" style="--x:1340;--y:560;--w:420;--h:140">
+        <div class="name">Gemini Flash</div>
+        <div class="role">（筆記・章節・整併・翻譯）</div>
+        <div class="sub">streamGenerateContent</div>
+      </div>
+
+      <div class="thesis" id="02-overview-thesis"><span id="02-overview-p1">每一個設計，都對應</span><span id="02-overview-p2">一個真實的<span class="mark">需求<i class="bar" id="02-overview-m1"></i></span></span><span id="02-overview-p3">或一次真實的<span class="mark">失敗<i class="bar" id="02-overview-m2"></i></span></span></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const ID = "02-overview";
+        const $ = (k) => document.getElementById(ID + "-" + k);
+        const E = "power3.out";
+        const tl = gsap.timeline({ paused: true });
+
+        // svg-path-draw: dash = measured length, dashoffset len → 0
+        function draw(el, at, dur) {
+          const len = el.getTotalLength();
+          el.style.strokeDasharray = len + " " + len;
+          tl.fromTo(el, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: dur, ease: E }, at);
+        }
+        function rise(el, at, dur, dy) {
+          tl.fromTo(el, { opacity: 0, y: dy }, { opacity: 1, y: 0, duration: dur, ease: E }, at);
+        }
+        function fade(el, at, dur) {
+          tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: dur, ease: E }, at);
+        }
+        // Scene 2 box entrance: fade + rise from 8% below
+        function boxRise(el, at) {
+          tl.fromTo(el, { opacity: 0, yPercent: 8 }, { opacity: 1, yPercent: 0, duration: 0.6, ease: E }, at);
+        }
+        // spring-pop-entrance: scale 0 → 1, smooth power3 settle, small rise
+        function pop(el, at) {
+          tl.fromTo(el, { scale: 0, opacity: 0, y: 12 }, { scale: 1, opacity: 1, y: 0, duration: 0.55, ease: E }, at);
+        }
+
+        // ---- Scene 1 (0.0–1.4s): kicker + display title ----
+        rise($("kicker"), 0.1, 0.7, 16);
+        rise($("title"), 0.25, 0.8, 20);
+
+        // ---- Scene 2 (1.4–3.4s): 你的電腦 frame draws, server + disk rise, server → disk ----
+        draw($("pen"), 1.4, 0.95);
+        rise($("legend"), 1.55, 0.5, 8);
+        boxRise($("server"), 2.15);
+        boxRise($("disk"), 2.45);
+        draw($("w-disk"), 2.85, 0.35);
+        fade($("h-disk"), 3.12, 0.2);
+
+        // ---- Scene 3 (3.5–5.0s): browser / live / flash pop, three wires draw, 雲端, count ----
+        pop($("browser"), 3.5);
+        pop($("live"), 3.75);
+        pop($("flash"), 4.0);
+        fade($("cloud"), 3.9, 0.5);
+
+        draw($("w-ws"), 3.8, 0.4);
+        fade($("h-ws"), 4.12, 0.2);
+        rise($("t-ws"), 4.05, 0.45, 8);
+
+        draw($("w-live"), 4.05, 0.45);
+        fade($("h-live-a"), 4.4, 0.2);
+        fade($("h-live-b"), 4.4, 0.2);
+        rise($("t-live"), 4.3, 0.45, 8);
+
+        draw($("w-flash"), 4.3, 0.45);
+        fade($("h-flash-a"), 4.65, 0.2);
+        fade($("h-flash-b"), 4.65, 0.2);
+        rise($("t-flash"), 4.55, 0.45, 8);
+
+        // fifth box (flash) lands at 4.55 → the count appears
+        rise($("counter"), 4.55, 0.45, 10);
+
+        // ---- Scene 4 (5.1–10.75s): thesis, per-phrase reveal on the VO cues ----
+        // dynamic-content-sequencing: per-phrase timing is pre-computed once from content
+        // length; phrase starts are the narration cues, the underline lands after its phrase.
+        const BASE = 0.3;          // s, minimum reveal window per phrase
+        const SEC_PER_CHAR = 0.04; // s, char stagger (wide CJK glyphs)
+        const CHAR_DUR = 0.5;
+        const MARK_DUR = 0.5;
+        const CONTENT = [
+          { key: "p1", at: 5.1 },
+          { key: "p2", at: 6.6, mark: "m1" },
+          { key: "p3", at: 7.9, mark: "m2" },
+        ];
+
+        function splitChars(el) {
+          const out = [];
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          const nodes = [];
+          while (walker.nextNode()) nodes.push(walker.currentNode);
+          nodes.forEach((node) => {
+            const frag = document.createDocumentFragment();
+            Array.from(node.textContent).forEach((c) => {
+              const s = document.createElement("span");
+              s.className = "ch";
+              s.textContent = c;
+              frag.appendChild(s);
+              out.push(s);
+            });
+            node.parentNode.replaceChild(frag, node);
+          });
+          return out;
+        }
+
+        const TIMELINE = CONTENT.map((entry) => {
+          const chars = splitChars($(entry.key));
+          const reveal = BASE + chars.length * SEC_PER_CHAR;
+          return { ...entry, chars, markAt: entry.at + reveal };
+        });
+
+        TIMELINE.forEach((entry) => {
+          entry.chars.forEach((c, i) => {
+            tl.fromTo(c, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: CHAR_DUR, ease: E }, entry.at + i * SEC_PER_CHAR);
+          });
+          if (entry.mark) {
+            tl.fromTo($(entry.mark), { scaleX: 0 }, { scaleX: 1, duration: MARK_DUR, ease: E }, entry.markAt);
+          }
+        });
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines[ID] = tl;
+      })();
+    </script>
+  </div>
+</template>
