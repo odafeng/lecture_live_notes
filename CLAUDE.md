@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 指令
 
-virtualenv 一律是專案裡的 `.venv`。這不是偏好問題：`launcher.py` 會用 `.venv/bin/python` 去啟動 server，而 `tests/test_launcher.py` 真的會跑到那段，所以 CI 也是裝進 `.venv` 而不是 runner 的 Python。
+virtualenv 一律是專案裡的 `.venv`。這不是偏好問題：`launcher.py` 會用 `.venv/bin/python` 去啟動 server，而 `tests/test_launcher.py` 真的會跑到那段，所以 CI 也是裝進 `.venv` 而不是 runner 的 Python。`scripts/launch.applescript`（雙擊 Lecture.app 時執行）也寫死了同一個路徑，而且沒有測試涵蓋；改 venv 位置時兩邊都要改。
 
 ```bash
 .venv/bin/python -m pip install -r requirements-dev.txt
