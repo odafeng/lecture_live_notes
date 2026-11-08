@@ -30,7 +30,7 @@ curl 127.0.0.1:8000/health                              # key 讀到了嗎
 
 瀏覽器送 16kHz PCM 進 `/ws` → 後端另開一條 WebSocket 到 Gemini Transcribe Live → 逐字稿累積 → 每 `NOTE_WINDOW_SECONDS`（60 秒）叫一次 Gemini Flash 產出一段 note block → 每累積 `ROLLUP_EVERY_BLOCKS`（10 段）壓成一個章節摘要 → 下課時把章節摘要加上未整併的段落做最終整併 → 整併成功後翻成四種語言。
 
-Gemini 的連線每 `SESSION_ROTATE_SECONDS`（570 秒）主動輪替，因為它本身有時間上限（ADR 0003）。輪替期間錄音不中斷。
+Gemini 的連線每 `SESSION_ROTATE_SECONDS`（570 秒）主動輪替，因為單一 session 最長 10 分鐘（`README.md` 的 session 輪替說明；ADR 0003 講的是 keepalive ping 期限，不是輪替）。輪替期間錄音不中斷。
 
 重試分三層，因為三種呼叫的失敗代價不同：`LIVE_RETRY_DELAYS` 很快放棄（逐字稿還在，補不到那段筆記不致命）、`FINAL_RETRY_DELAYS` 等到 120 秒（整併是最貴也最不能丟的一次）、`BACKGROUND_RETRY_DELAYS` 用分鐘級間隔在瀏覽器關掉之後繼續試。
 
