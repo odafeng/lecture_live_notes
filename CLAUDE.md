@@ -48,7 +48,7 @@ Gemini 的連線每 `SESSION_ROTATE_SECONDS`（570 秒）主動輪替，因為�
 ## 幾個不變量
 
 - **譯本不得比正本舊。** `is_current()` 比對 mtime，比 `final_notes.md` 舊的譯本不進下載連結、不進 ZIP、`/download` 直接 404。刪除舊譯本只是盡力而為（唯讀檔會讓 `unlink` 失敗），把關的是時間戳（ADR 0006）。
-- **OpenCC (`s2tw`) 套用在逐字稿與筆記，不套用在譯本。** 課程名稱也轉。
+- **OpenCC (`s2tw`) 套用在逐字稿、筆記與所有 Gemini 摘要回傳的文字，譯本也包括在內**（`call_gemini_text()` 回傳前一律轉換）。`s2tw` 只動中文字元，對譯本的拉丁字母與變音符號沒有影響，只會把譯本裡夾帶的中文轉成繁體。課程名稱也轉。
 - **更正是指示，手寫筆記是素材。** 更正累積成清單注入三個 prompt 並宣告「衝突時以更正為準」；手寫筆記由後端原文附加在 `USER_NOTES_HEADING` 底下，不交給模型轉述（ADR 0005）。
 - **翻譯是整併之後獨立的一步。** 不併進 `final_prompt`，整併失敗時完全跳過（ADR 0006）。
 - **摘要的 thinking 固定壓到最低。** Gemini 的 thought token 計入 `maxOutputTokens`，預設等級會把預算吃光、回傳空正文；`thinkingLevel: minimal` 寫死在 `SUMMARY_GENERATION_CONFIG`，它不保證完全不思考，換 `SUMMARY_MODEL` 前要先確認新模型接受它（ADR 0008）。
