@@ -106,6 +106,11 @@ class RecordingTests(unittest.TestCase):
             # Every chunk reached the recording, the one the loop was stuck on included.
             self.assertEqual(recorded_frames(), 3 * FRAMES_PER_CHUNK)
             self.assertTrue(list(app.OUTPUT_DIR.glob("*/*/finalize_input.json")))
+            # No transcript means nothing to merge (#12), but the audio is there and the page
+            # must not read as if the recording were lost.
+            [final] = [m for m in browser.sent if m["type"] == "final"]
+            self.assertEqual(final["status"], app.FINAL_STATUS_EMPTY)
+            self.assertIn("錄音已保存", final["text"])
 
     def test_an_unclosed_recording_already_says_how_long_it_is(self):
         """#11: a server that stopped before close() left a WAV that could not be read."""

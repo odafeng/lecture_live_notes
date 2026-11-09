@@ -276,6 +276,7 @@ function handleMessage(event) {
   if (msg.type === "final") {
     finalPanel.hidden = false;
     finalEl.innerHTML = msg.html;
+    finalPanel.dataset.status = msg.status || "";
     // An empty lecture was deliberately not merged; re-merging would bill the calls it skipped.
     remergeBtn.hidden = msg.status === "empty";
     if (msg.status === "failed") {
@@ -287,7 +288,9 @@ function handleMessage(event) {
     renderDownloads(msg.files || {});
     $("savedBadge").hidden = false;
     setPhase("complete");
-    setStatus("本堂課已儲存，筆記準備好複習了");
+    setStatus(finalPanel.dataset.status === "empty"
+      ? "本堂課已儲存，沒有可整理成筆記的內容"
+      : "本堂課已儲存，筆記準備好複習了");
   }
   if (msg.type === "error") {
     showNotice(msg.text);

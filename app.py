@@ -1152,10 +1152,15 @@ async def websocket_endpoint(ws: WebSocket):
 
         if not (chapters or remaining or user_notes):
             # Nothing was said, typed or summarised: the page closed before the microphone
-            # opened, or the room stayed silent. Merging would bill a merge and four translations
-            # to dress up an empty page (#12), so nothing is written and nothing is retried.
+            # opened, the room stayed silent, or transcription gave up. Merging would bill a merge
+            # and four translations to dress up an empty page (#12), so nothing is written and
+            # nothing is retried. When audio did arrive, say so: the recording is not lost.
             final_status = FINAL_STATUS_EMPTY
-            final_notes = f"# {course_title or '課堂筆記'}\n\n這堂課沒有錄到可以整理的內容。"
+            if await get_audio_elapsed() > 0:
+                why = "錄音已保存（lecture.wav），但沒有可以整理成筆記的逐字稿。"
+            else:
+                why = "這堂課沒有錄到可以整理的內容。"
+            final_notes = f"# {course_title or '課堂筆記'}\n\n{why}"
         else:
             # The merge runs inside the lock, not just the writing. The user can press
             # "re-merge" while this one is still waiting on the API; if that run succeeds and this
