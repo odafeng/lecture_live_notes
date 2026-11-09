@@ -137,5 +137,20 @@ class RecordingTests(unittest.TestCase):
             self.assertEqual(snapshots, [(n, n * FRAMES_PER_CHUNK) for n in (1, 2, 3)])
             self.assertEqual(recorded_frames(), 3 * FRAMES_PER_CHUNK)
 
+    def test_a_lecture_with_nothing_to_merge_is_not_merged(self):
+        """#12: a page that closed before the microphone opened still billed a merge and four
+        translations against empty material."""
+        browser = FakeBrowser([meta(), {"type": "websocket.disconnect"}])
+        with tempfile.TemporaryDirectory() as output, fake_services(output) as requests, \
+                patch.object(app, "spawn_background_finalize") as retry:
+            asyncio.run(asyncio.wait_for(app.websocket_endpoint(browser), timeout=10))
+
+            self.assertEqual(requests, [])
+            retry.assert_not_called()
+            [session_dir] = [p.parent for p in app.OUTPUT_DIR.glob("*/*/session.json")]
+            meta_saved = json.loads((session_dir / "session.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta_saved["final_notes_status"], app.FINAL_STATUS_EMPTY)
+            self.assertFalse(list(session_dir.glob("final_notes*")))
+
 if __name__ == "__main__":
     unittest.main()

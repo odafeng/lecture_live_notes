@@ -276,7 +276,8 @@ function handleMessage(event) {
   if (msg.type === "final") {
     finalPanel.hidden = false;
     finalEl.innerHTML = msg.html;
-    remergeBtn.hidden = false;
+    // An empty lecture was deliberately not merged; re-merging would bill the calls it skipped.
+    remergeBtn.hidden = msg.status === "empty";
     if (msg.status === "failed") {
       showNotice("完整筆記整併失敗，逐字稿與即時筆記都已保存。伺服器會在背景自動重試，你也可以按「重新整併」立刻重跑。");
     }

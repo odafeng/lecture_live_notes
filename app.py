@@ -386,6 +386,7 @@ def session_paths(session_id: str):
 
 FINAL_STATUS_OK = "ok"
 FINAL_STATUS_FAILED = "failed"
+FINAL_STATUS_EMPTY = "empty"  # nothing to merge, so no merge was attempted (#12)
 SESSION_ID_PATTERN = r"\d{8}_\d{6}"
 
 _background_tasks: set[asyncio.Task] = set()
@@ -1149,23 +1150,30 @@ async def websocket_endpoint(ws: WebSocket):
              "user_notes": user_notes, "corrections": corrections},
             ensure_ascii=False, indent=2), encoding="utf-8")
 
-        # The merge runs inside the lock, not just the writing. The user can press "re-merge"
-        # while this one is still waiting on the API; if that run succeeds and this one then
-        # fails, a fallback written afterwards would bury the good notes.
-        async with session_lock(session_id):
-            final_status = FINAL_STATUS_OK
-            try:
-                final_notes = await call_gemini_text(
-                    final_prompt(chapters, remaining, course_title, user_notes, corrections),
-                    retry_delays=FINAL_RETRY_DELAYS)
-            except Exception as e:
-                final_status = FINAL_STATUS_FAILED
-                final_notes = final_fallback_notes(course_title, chapters, remaining, e)
+        if not (chapters or remaining or user_notes):
+            # Nothing was said, typed or summarised: the page closed before the microphone
+            # opened, or the room stayed silent. Merging would bill a merge and four translations
+            # to dress up an empty page (#12), so nothing is written and nothing is retried.
+            final_status = FINAL_STATUS_EMPTY
+            final_notes = f"# {course_title or '課堂筆記'}\n\n這堂課沒有錄到可以整理的內容。"
+        else:
+            # The merge runs inside the lock, not just the writing. The user can press
+            # "re-merge" while this one is still waiting on the API; if that run succeeds and this
+            # one then fails, a fallback written afterwards would bury the good notes.
+            async with session_lock(session_id):
+                final_status = FINAL_STATUS_OK
+                try:
+                    final_notes = await call_gemini_text(
+                        final_prompt(chapters, remaining, course_title, user_notes, corrections),
+                        retry_delays=FINAL_RETRY_DELAYS)
+                except Exception as e:
+                    final_status = FINAL_STATUS_FAILED
+                    final_notes = final_fallback_notes(course_title, chapters, remaining, e)
 
-            # Appended on both paths: a failed merge must not cost the user their own words.
-            final_notes = append_user_notes_section(final_notes, user_notes)
-            final_notes, final_status = await publish_final_notes(
-                session_id, paths, course_title, final_notes, final_status)
+                # Appended on both paths: a failed merge must not cost the user their own words.
+                final_notes = append_user_notes_section(final_notes, user_notes)
+                final_notes, final_status = await publish_final_notes(
+                    session_id, paths, course_title, final_notes, final_status)
         duration = await get_audio_elapsed()
         meta = {
             "session_id": session_id,

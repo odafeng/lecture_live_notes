@@ -19,6 +19,11 @@ Accepted（2026-09-08）
 
 整併前先把素材寫成 `finalize_input.json`（`course_title`、`chapters`、`remaining`），不管整併成功與否都寫。整併結果記在 `session.json` 的 `final_notes_status` 欄位（`ok` / `failed`）。
 
+補記（#12）：第三個值 `empty` 表示沒有任何可整併的素材（沒有章節、沒有筆記段落、沒有手寫筆記），
+例如頁面在麥克風開啟前就關了，或整堂課沒有人說話。這時不呼叫模型、不寫 `final_notes.md`、
+不翻譯、不排背景重試；`/sessions/incomplete` 只列 `failed`，所以也不會提示。前端在這種課不顯示
+「重新整併」按鈕，以免一按又把省下的五次呼叫花掉。
+
 在這之上提供三條路徑：
 
 - `POST /finalize/{session_id}` 重跑整併，覆寫 `final_notes.md` 並把狀態改回 `ok`。
