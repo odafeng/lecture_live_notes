@@ -70,6 +70,11 @@ GEMINI_PING_TIMEOUT_SECONDS = int(os.getenv("GEMINI_PING_TIMEOUT_SECONDS", "60")
 LIVE_RETRY_DELAYS = (2, 4, 8)
 FINAL_RETRY_DELAYS = (5, 15, 45, 120)
 BACKGROUND_RETRY_DELAYS = (60, 300, 900)
+# Pauses between Gemini Live reconnects. One consecutive failure more than this gives up on ASR;
+# the recording itself carries on.
+ASR_RETRY_DELAYS = (1.5, 3, 4.5, 6)
+# Audio waiting for Gemini while a connection rotates or reconnects: ~85 ms a chunk, so ~42 s.
+AUDIO_QUEUE_CHUNKS = 500
 # Responses are streamed, so `read` bounds the gap between chunks rather than the whole generation.
 STREAM_TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=60.0, pool=30.0)
 
@@ -755,7 +760,7 @@ async def websocket_endpoint(ws: WebSocket):
     wav_file.setsampwidth(BYTES_PER_SAMPLE)
     wav_file.setframerate(SAMPLE_RATE)
 
-    audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=500)
+    audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=AUDIO_QUEUE_CHUNKS)
     transcript_queue: asyncio.Queue[tuple[str, float] | None] = asyncio.Queue()
     asr_failed = asyncio.Event()
 
@@ -953,14 +958,19 @@ async def websocket_endpoint(ws: WebSocket):
                     "type": "asr_error",
                     "text": f"Gemini Live 連線錯誤：{type(e).__name__}: {e}",
                 })
-                if failures >= 5:
+                if failures > len(ASR_RETRY_DELAYS):
                     asr_failed.set()
+                    # The receive loop may already be parked in put() on a full queue, and nothing
+                    # will take from it again. Emptying it lets that put() return; from then on the
+                    # loop sees asr_failed and stops feeding the queue. The WAV already has it all.
+                    while not audio_queue.empty():
+                        audio_queue.get_nowait()
                     await safe_send({
                         "type": "error",
-                        "text": "Gemini Live 連續連線失敗 5 次。錄音仍會保存，但本堂課不再產生即時逐字稿。",
+                        "text": f"Gemini Live 連續連線失敗 {failures} 次。錄音仍會保存，但本堂課不再產生即時逐字稿。",
                     })
                     return
-                await asyncio.sleep(min(1.5 * failures, 6))
+                await asyncio.sleep(ASR_RETRY_DELAYS[failures - 1])
             finally:
                 if receiver_task:
                     if not receiver_task.done():

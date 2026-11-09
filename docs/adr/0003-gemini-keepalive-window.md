@@ -30,4 +30,9 @@ websockets.exceptions.ConnectionClosedError: sent 1011 (internal error) keepaliv
 
 `audio_queue` 的 maxsize 500 約等於 42 秒緩衝，重連 backoff 最多 6 秒，所以重連期間的音訊不會掉。但若斷線超過 42 秒，`audio_queue.put()` 會阻塞接收迴圈，連帶讓 wav 寫入落後。
 
+補記（#10）：上面假設 worker 終究會重連、把 queue 取空。若 worker 連續失敗到放棄 ASR 時
+queue 剛好是滿的，已經卡在 `put()` 的接收迴圈就再也醒不來：`stop` 讀不到、收尾不會執行。
+因此放棄時會先清空 `audio_queue`，接收迴圈的 `put()` 才能返回，之後看到 `asr_failed`
+就不再餵 queue。佇列大小與重連間隔也改成模組常數 `AUDIO_QUEUE_CHUNKS`、`ASR_RETRY_DELAYS`。
+
 順帶修掉 `finally` 區塊沒有取回 receiver task 例外的問題。原本只在 task 未完成時才 `await`，已完成且帶例外的 task 就沒人收，asyncio 會把整段 traceback 印進 log。診斷時最難讀的就是這段雜訊。
