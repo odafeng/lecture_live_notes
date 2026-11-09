@@ -649,29 +649,48 @@ async def bundle(session_id: str):
     if not re.fullmatch(SESSION_ID_PATTERN, session_id):
         raise HTTPException(status_code=404)
     session_dir = session_dir_for(session_id)
-    present = session_files(session_id, BUNDLE_FILES)
-    if not present:
-        raise HTTPException(status_code=404)
 
-    # Zipped to a temp file rather than memory: an hour of lecture audio is not small.
-    archive = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
-    archive.close()
+    def notes_version():
+        try:
+            stat = (session_dir / "final_notes.md").stat()
+        except FileNotFoundError:
+            return None
+        return stat.st_mtime_ns, stat.st_size
 
-    def build_archive():
-        with zipfile.ZipFile(archive.name, "w", zipfile.ZIP_DEFLATED) as bundled:
+    def build_archive(path, present):
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as bundled:
             for name in present:
                 bundled.write(session_dir / name, arcname=name)
 
-    try:
-        # In a worker thread: deflating an hour of audio takes seconds, and on the event loop
-        # it would stall every lecture being recorded meanwhile (#8).
-        await asyncio.to_thread(build_archive)
-    except BaseException:
+    # In a worker thread: deflating an hour of audio takes seconds, and on the event loop it
+    # would stall every lecture being recorded meanwhile (#8). Off the loop, a re-merge can now
+    # publish mid-zip and leave new notes beside a translation of the old ones (ADR 0006), so
+    # the zip is checked against the notes' version and rebuilt if they changed under it. A
+    # merge rewrites the notes once, so a rebuild settles; the lock is not taken, since a merge
+    # can hold it for minutes.
+    for _ in range(3):
+        version = notes_version()
+        present = session_files(session_id, BUNDLE_FILES)
+        if not present:
+            raise HTTPException(status_code=404)
+        # Zipped to a temp file rather than memory: an hour of lecture audio is not small.
+        archive = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        archive.close()
+        try:
+            await asyncio.to_thread(build_archive, archive.name, present)
+        except FileNotFoundError:
+            # A stale translation was deleted mid-zip: the same re-merge, seen another way.
+            os.unlink(archive.name)
+            continue
+        except BaseException:
+            os.unlink(archive.name)
+            raise
+        if notes_version() == version:
+            return FileResponse(archive.name, media_type="application/zip",
+                                filename=bundle_filename(session_id),
+                                background=BackgroundTask(os.unlink, archive.name))
         os.unlink(archive.name)
-        raise
-    return FileResponse(archive.name, media_type="application/zip",
-                        filename=bundle_filename(session_id),
-                        background=BackgroundTask(os.unlink, archive.name))
+    raise HTTPException(status_code=503, detail="這堂課的筆記正在更新，請稍後再下載。")
 
 
 @app.get("/download/{session_id}/{filename}")

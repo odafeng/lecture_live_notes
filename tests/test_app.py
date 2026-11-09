@@ -612,6 +612,62 @@ class FinalizeTests(unittest.TestCase):
         # Two files at 0.2 s each: a free loop ticks dozens of times, a blocked one not at all.
         self.assertGreater(during, 5)
 
+    def test_a_bundle_never_pairs_new_notes_with_old_translations(self):
+        """With the zip off the event loop a re-merge can land mid-zip. The ZIP must still hold
+        one version of the notes, never a translation older than them (ADR 0006)."""
+        real_write = zipfile.ZipFile.write
+        for removes_old_copy in (False, True):
+            with self.subTest(removes_old_copy=removes_old_copy):
+                self.write_session()
+                notes = self.session_dir / "final_notes.md"
+                notes.write_text("# 舊版", encoding="utf-8")
+                english = self.session_dir / "final_notes.en.md"
+                english.write_text("old English", encoding="utf-8")
+                landed = False
+
+                def landing_write(archive, *args, **kwargs):
+                    nonlocal landed
+                    if not landed:
+                        landed = True
+                        # A re-merge publishes now: new notes, newer than every translation.
+                        notes.write_text("# 新版", encoding="utf-8")
+                        later = english.stat().st_mtime_ns + 1_000_000_000
+                        os.utime(notes, ns=(later, later))
+                        if removes_old_copy:  # a failed translation deletes its stale copy
+                            english.unlink()
+                    return real_write(archive, *args, **kwargs)
+
+                with patch.object(zipfile.ZipFile, "write", landing_write), \
+                        TestClient(app.app) as client:
+                    response = client.get(f"/bundle/{self.SESSION}")
+
+                self.assertEqual(response.status_code, 200)
+                with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
+                    self.assertEqual(bundle.read("final_notes.md").decode("utf-8"), "# 新版")
+                    self.assertNotIn("final_notes.en.md", bundle.namelist())
+
+    def test_a_bundle_gives_up_on_notes_that_keep_changing(self):
+        """The rebuild is bounded: notes rewritten under every attempt get a 503, not a loop."""
+        self.write_session()
+        notes = self.session_dir / "final_notes.md"
+        real_write = zipfile.ZipFile.write
+        attempts = []
+
+        def churning_write(archive, *args, **kwargs):
+            if archive.filename not in attempts:
+                attempts.append(archive.filename)
+                bumped = notes.stat().st_mtime_ns + 1_000_000_000
+                os.utime(notes, ns=(bumped, bumped))
+            return real_write(archive, *args, **kwargs)
+
+        with patch.object(zipfile.ZipFile, "write", churning_write), \
+                TestClient(app.app) as client:
+            response = client.get(f"/bundle/{self.SESSION}")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(len(attempts), 3)
+        self.assertFalse(any(Path(a).exists() for a in attempts))  # no temp file left behind
+
     def test_bundle_skips_files_the_lecture_never_wrote(self):
         self.write_session()
         with TestClient(app.app) as client:
