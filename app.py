@@ -70,6 +70,11 @@ GEMINI_PING_TIMEOUT_SECONDS = int(os.getenv("GEMINI_PING_TIMEOUT_SECONDS", "60")
 LIVE_RETRY_DELAYS = (2, 4, 8)
 FINAL_RETRY_DELAYS = (5, 15, 45, 120)
 BACKGROUND_RETRY_DELAYS = (60, 300, 900)
+# Pauses between Gemini Live reconnects. ASR gives up after len(ASR_RETRY_DELAYS) + 1
+# consecutive failures; the recording itself carries on.
+ASR_RETRY_DELAYS = (1.5, 3, 4.5, 6)
+# Audio waiting for Gemini while a connection rotates or reconnects: ~85 ms a chunk, so ~42 s.
+AUDIO_QUEUE_CHUNKS = 500
 # Responses are streamed, so `read` bounds the gap between chunks rather than the whole generation.
 STREAM_TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=60.0, pool=30.0)
 
@@ -381,6 +386,7 @@ def session_paths(session_id: str):
 
 FINAL_STATUS_OK = "ok"
 FINAL_STATUS_FAILED = "failed"
+FINAL_STATUS_EMPTY = "empty"  # nothing to merge, so no merge was attempted (#12)
 SESSION_ID_PATTERN = r"\d{8}_\d{6}"
 
 _background_tasks: set[asyncio.Task] = set()
@@ -768,8 +774,12 @@ async def websocket_endpoint(ws: WebSocket):
     wav_file.setnchannels(1)
     wav_file.setsampwidth(BYTES_PER_SAMPLE)
     wav_file.setframerate(SAMPLE_RATE)
+    # Header out now, sized zero. writeframes patches the header (and its seek flushes the file)
+    # only when the length on record is wrong; left to the first chunk, the header would be
+    # sized to that chunk, so the first chunk alone would sit unflushed and unreadable (#11).
+    wav_file.writeframes(b"")
 
-    audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=500)
+    audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=AUDIO_QUEUE_CHUNKS)
     transcript_queue: asyncio.Queue[tuple[str, float] | None] = asyncio.Queue()
     asr_failed = asyncio.Event()
 
@@ -967,14 +977,19 @@ async def websocket_endpoint(ws: WebSocket):
                     "type": "asr_error",
                     "text": f"Gemini Live 連線錯誤：{type(e).__name__}: {e}",
                 })
-                if failures >= 5:
+                if failures > len(ASR_RETRY_DELAYS):
                     asr_failed.set()
+                    # The receive loop may already be parked in put() on a full queue, and nothing
+                    # will take from it again. Emptying it lets that put() return; from then on the
+                    # loop sees asr_failed and stops feeding the queue. The WAV already has it all.
+                    while not audio_queue.empty():
+                        audio_queue.get_nowait()
                     await safe_send({
                         "type": "error",
-                        "text": "Gemini Live 連續連線失敗 5 次。錄音仍會保存，但本堂課不再產生即時逐字稿。",
+                        "text": f"Gemini Live 連續連線失敗 {failures} 次。錄音仍會保存，但本堂課不再產生即時逐字稿。",
                     })
                     return
-                await asyncio.sleep(min(1.5 * failures, 6))
+                await asyncio.sleep(ASR_RETRY_DELAYS[failures - 1])
             finally:
                 if receiver_task:
                     if not receiver_task.done():
@@ -1066,7 +1081,13 @@ async def websocket_endpoint(ws: WebSocket):
 
             if message.get("bytes") is not None:
                 data = message["bytes"]
-                wav_file.writeframesraw(data)
+                # writeframes, not writeframesraw: it rewrites the header's length after every
+                # chunk, and the seek that takes flushes Python's buffer to the OS, so a server
+                # process that dies mid-lecture leaves a WAV that plays up to its last chunk.
+                # (No fsync: a power cut can still lose what the OS had not written out.)
+                # writeframesraw left the header at the first chunk and up to 128 KiB (~4 s) in
+                # Python's memory until close() (#11).
+                wav_file.writeframes(data)
                 async with state_lock:
                     audio_bytes_received += len(data)
 
@@ -1143,23 +1164,35 @@ async def websocket_endpoint(ws: WebSocket):
              "user_notes": user_notes, "corrections": corrections},
             ensure_ascii=False, indent=2), encoding="utf-8")
 
-        # The merge runs inside the lock, not just the writing. The user can press "re-merge"
-        # while this one is still waiting on the API; if that run succeeds and this one then
-        # fails, a fallback written afterwards would bury the good notes.
-        async with session_lock(session_id):
-            final_status = FINAL_STATUS_OK
-            try:
-                final_notes = await call_gemini_text(
-                    final_prompt(chapters, remaining, course_title, user_notes, corrections),
-                    retry_delays=FINAL_RETRY_DELAYS)
-            except Exception as e:
-                final_status = FINAL_STATUS_FAILED
-                final_notes = final_fallback_notes(course_title, chapters, remaining, e)
+        if not (chapters or remaining or user_notes):
+            # Nothing was said, typed or summarised: the page closed before the microphone
+            # opened, the room stayed silent, or transcription gave up. Merging would bill a merge
+            # and four translations to dress up an empty page (#12), so nothing is written and
+            # nothing is retried. When audio did arrive, say so: the recording is not lost.
+            final_status = FINAL_STATUS_EMPTY
+            if await get_audio_elapsed() > 0:
+                why = "錄音已保存（lecture.wav），但沒有可以整理成筆記的逐字稿。"
+            else:
+                why = "這堂課沒有錄到可以整理的內容。"
+            final_notes = f"# {course_title or '課堂筆記'}\n\n{why}"
+        else:
+            # The merge runs inside the lock, not just the writing. The user can press
+            # "re-merge" while this one is still waiting on the API; if that run succeeds and this
+            # one then fails, a fallback written afterwards would bury the good notes.
+            async with session_lock(session_id):
+                final_status = FINAL_STATUS_OK
+                try:
+                    final_notes = await call_gemini_text(
+                        final_prompt(chapters, remaining, course_title, user_notes, corrections),
+                        retry_delays=FINAL_RETRY_DELAYS)
+                except Exception as e:
+                    final_status = FINAL_STATUS_FAILED
+                    final_notes = final_fallback_notes(course_title, chapters, remaining, e)
 
-            # Appended on both paths: a failed merge must not cost the user their own words.
-            final_notes = append_user_notes_section(final_notes, user_notes)
-            final_notes, final_status = await publish_final_notes(
-                session_id, paths, course_title, final_notes, final_status)
+                # Appended on both paths: a failed merge must not cost the user their own words.
+                final_notes = append_user_notes_section(final_notes, user_notes)
+                final_notes, final_status = await publish_final_notes(
+                    session_id, paths, course_title, final_notes, final_status)
         duration = await get_audio_elapsed()
         meta = {
             "session_id": session_id,
