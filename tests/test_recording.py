@@ -107,6 +107,30 @@ class RecordingTests(unittest.TestCase):
             self.assertEqual(recorded_frames(), 3 * FRAMES_PER_CHUNK)
             self.assertTrue(list(app.OUTPUT_DIR.glob("*/*/finalize_input.json")))
 
+    def test_an_unclosed_recording_already_says_how_long_it_is(self):
+        """#11: a server that stopped before close() left a header counting only the first chunk."""
+
+        async def scenario():
+            seen = {}
+
+            async def watch(message):
+                if message is not None and message.get("text") == stop()["text"]:
+                    # Every chunk before stop is written, and close() has not run: the file as a
+                    # crash at this moment would leave it.
+                    try:
+                        seen["frames"] = recorded_frames()
+                    except (EOFError, wave.Error) as unreadable:
+                        seen["frames"] = f"unreadable ({type(unreadable).__name__})"
+
+            browser = FakeBrowser([meta(), audio(), audio(), audio(), stop()], on_receive=watch)
+            await asyncio.wait_for(app.websocket_endpoint(browser), timeout=10)
+            return seen["frames"]
+
+        with tempfile.TemporaryDirectory() as output, fake_services(output):
+            frames_before_close = asyncio.run(scenario())
+            self.assertEqual(frames_before_close, 3 * FRAMES_PER_CHUNK)
+            self.assertEqual(recorded_frames(), 3 * FRAMES_PER_CHUNK)
+
 
 if __name__ == "__main__":
     unittest.main()

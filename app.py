@@ -1062,7 +1062,12 @@ async def websocket_endpoint(ws: WebSocket):
 
             if message.get("bytes") is not None:
                 data = message["bytes"]
-                wav_file.writeframesraw(data)
+                # writeframes, not writeframesraw: it rewrites the header's length after every
+                # chunk, and the seek that takes flushes the buffer, so a server that stops
+                # mid-lecture leaves a WAV that plays to within one chunk of where it stopped.
+                # writeframesraw left the header at the first chunk and up to 128 KiB (~4 s) in
+                # memory until close() (#11).
+                wav_file.writeframes(data)
                 async with state_lock:
                     audio_bytes_received += len(data)
 

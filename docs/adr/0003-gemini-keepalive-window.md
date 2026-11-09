@@ -26,7 +26,12 @@ websockets.exceptions.ConnectionClosedError: sent 1011 (internal error) keepaliv
 
 真正斷掉的連線要多花大約 40 秒才會被偵測到並重連，這段時間的逐字稿會掉。這是刻意的取捨：誤判健康連線的代價（每次斷線都掉一段逐字稿，而且在爛網路下反覆發生）高於延後偵測真正斷線的代價。
 
-錄音不受影響。`wav_file.writeframesraw(data)` 在 `audio_queue.put()` 之前執行，也不看 `asr_failed` 旗標，所以就算 ASR 完全掛掉，`lecture.wav` 仍然完整，事後永遠能從音檔重跑逐字稿。
+錄音不受影響。`wav_file.writeframes(data)` 在 `audio_queue.put()` 之前執行，也不看 `asr_failed` 旗標，所以就算 ASR 完全掛掉，`lecture.wav` 仍然完整，事後永遠能從音檔重跑逐字稿。
+
+補記（#11）：原本用的是 `writeframesraw`，它不更新 WAV 檔頭，資料也留在 Python 的寫入緩衝區
+（3.14 預設 128 KiB，約 4 秒音訊）直到 `close()`。server 在下課前停掉時，硬碟上的檔案讀不出來，
+「錄音仍然完整」只在正常收尾時成立。改用 `writeframes` 後，每包都會改寫檔頭長度，改寫時的
+seek 會把緩衝區寫到硬碟。實測一小時約多花 0.4 秒。
 
 `audio_queue` 的 maxsize 500 約等於 42 秒緩衝，重連 backoff 最多 6 秒，所以重連期間的音訊不會掉。但若斷線超過 42 秒，`audio_queue.put()` 會阻塞接收迴圈，連帶讓 wav 寫入落後。
 
