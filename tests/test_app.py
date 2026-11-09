@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import runpy
 import tempfile
+import time
 import unittest
 import zipfile
 from unittest.mock import AsyncMock, call, patch
@@ -566,7 +567,7 @@ class FinalizeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "application/zip")
         with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
-            # Spelled out rather than compared against BUNDLE_FILES: the constant defines the
+            # Spelled out rather than compared against LECTURE_FILES: the constant defines the
             # zip, so checking one against the other passes even when a file goes missing.
             self.assertEqual(sorted(bundle.namelist()), sorted([
                 "lecture.wav", "transcript.txt", "live_notes.md", "session.json",
@@ -578,6 +579,94 @@ class FinalizeTests(unittest.TestCase):
             self.assertEqual(bundle.read("transcript.txt").decode("utf-8"), "內容 transcript.txt")
         # The download is named after the lecture, not the opaque session id.
         self.assertIn("20260908", response.headers["content-disposition"])
+
+    def test_building_a_bundle_leaves_the_event_loop_free(self):
+        """#8: zipping on the loop froze every lecture being recorded while it ran."""
+        self.write_session()
+        real_write = zipfile.ZipFile.write
+
+        def slow_write(archive, *args, **kwargs):
+            time.sleep(0.2)  # stands in for deflating an hour of audio
+            return real_write(archive, *args, **kwargs)
+
+        async def scenario():
+            ticks = 0
+
+            async def tick():
+                nonlocal ticks
+                while True:
+                    ticks += 1
+                    await asyncio.sleep(0.01)
+
+            ticker = asyncio.create_task(tick())
+            await asyncio.sleep(0.01)
+            before = ticks
+            response = await app.bundle(self.SESSION)
+            during = ticks - before
+            ticker.cancel()
+            os.unlink(response.path)  # its BackgroundTask cleanup never runs outside a request
+            return during
+
+        with patch.object(zipfile.ZipFile, "write", slow_write):
+            during = asyncio.run(scenario())
+        # Two files at 0.2 s each: a free loop ticks dozens of times, a blocked one not at all.
+        self.assertGreater(during, 5)
+
+    def test_a_bundle_never_pairs_new_notes_with_old_translations(self):
+        """With the zip off the event loop a re-merge can land mid-zip. The ZIP must still hold
+        one version of the notes, never a translation older than them (ADR 0006)."""
+        real_write = zipfile.ZipFile.write
+        for removes_old_copy in (False, True):
+            with self.subTest(removes_old_copy=removes_old_copy):
+                self.write_session()
+                notes = self.session_dir / "final_notes.md"
+                notes.write_text("# 舊版", encoding="utf-8")
+                english = self.session_dir / "final_notes.en.md"
+                english.write_text("old English", encoding="utf-8")
+                landed = False
+
+                def landing_write(archive, *args, **kwargs):
+                    nonlocal landed
+                    if not landed:
+                        landed = True
+                        # A re-merge publishes now: new notes, newer than every translation.
+                        notes.write_text("# 新版", encoding="utf-8")
+                        later = english.stat().st_mtime_ns + 1_000_000_000
+                        os.utime(notes, ns=(later, later))
+                        if removes_old_copy:  # a failed translation deletes its stale copy
+                            english.unlink()
+                    return real_write(archive, *args, **kwargs)
+
+                with patch.object(zipfile.ZipFile, "write", landing_write), \
+                        TestClient(app.app) as client:
+                    response = client.get(f"/bundle/{self.SESSION}")
+
+                self.assertEqual(response.status_code, 200)
+                with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
+                    self.assertEqual(bundle.read("final_notes.md").decode("utf-8"), "# 新版")
+                    self.assertNotIn("final_notes.en.md", bundle.namelist())
+
+    def test_a_bundle_gives_up_on_notes_that_keep_changing(self):
+        """The rebuild is bounded: notes rewritten under every attempt get a 503, not a loop."""
+        self.write_session()
+        notes = self.session_dir / "final_notes.md"
+        real_write = zipfile.ZipFile.write
+        attempts = []
+
+        def churning_write(archive, *args, **kwargs):
+            if archive.filename not in attempts:
+                attempts.append(archive.filename)
+                bumped = notes.stat().st_mtime_ns + 1_000_000_000
+                os.utime(notes, ns=(bumped, bumped))
+            return real_write(archive, *args, **kwargs)
+
+        with patch.object(zipfile.ZipFile, "write", churning_write), \
+                TestClient(app.app) as client:
+            response = client.get(f"/bundle/{self.SESSION}")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(len(attempts), 3)
+        self.assertFalse(any(Path(a).exists() for a in attempts))  # no temp file left behind
 
     def test_bundle_skips_files_the_lecture_never_wrote(self):
         self.write_session()
@@ -606,6 +695,21 @@ class FinalizeTests(unittest.TestCase):
         with TestClient(app.app) as client:
             self.assertEqual(client.get("/bundle/not-a-session").status_code, 404)
             self.assertEqual(client.get("/bundle/20260101_000000").status_code, 404)
+
+    def test_one_list_decides_what_a_lecture_hands_out(self):
+        """#9: the ZIP, the links and /download each kept their own copy of the file list."""
+        self.write_session()
+        (self.session_dir / "slides.pdf").write_bytes(b"%PDF-1.7")
+        extended = {**app.LECTURE_FILES, "slides.pdf": "slides"}
+        with patch.object(app, "LECTURE_FILES", extended), TestClient(app.app) as client:
+            links = app.download_links(self.SESSION)
+            served = client.get(f"/download/{self.SESSION}/slides.pdf")
+            bundled = client.get(f"/bundle/{self.SESSION}")
+
+        self.assertEqual(links.get("slides"), f"/download/{self.SESSION}/slides.pdf")
+        self.assertEqual(served.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(bundled.content)) as bundle:
+            self.assertIn("slides.pdf", bundle.namelist())
 
     def test_a_day_gets_one_folder_holding_each_recording(self):
         self.write_session()

@@ -64,7 +64,7 @@ Gemini 的連線每 `SESSION_ROTATE_SECONDS`（570 秒）主動輪替，因為�
 
 - **新的測試類別必須 `patch.object(app, "GEMINI_API_KEY", "test-key")`。** 沒 patch 的話，本機因為 `.env` 有真 key 會全綠，CI 沒有 key 則在碰到 mock transport 之前就 `RuntimeError`。
 - **判斷翻譯請求是哪個語言，要讀 prompt 的第一行。** prompt 內文含有 "Leave English technical terms in English"，子字串比對會讓每個語言都命中 English。
-- **不要拿 `app.BUNDLE_FILES` 當 ZIP 測試的期望值。** 那個常數就是 ZIP 的定義，拿它比對自己，從常數裡刪掉一個檔案測試照樣會過。要明列檔名。
+- **不要拿 `app.LECTURE_FILES` 當 ZIP 或下載測試的期望值。** 那個常數就是 ZIP、下載連結與 `/download` 白名單共用的定義，拿它比對自己，從常數裡刪掉一個檔案測試照樣會過。要明列檔名。
 
 ## 前端
 

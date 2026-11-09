@@ -51,10 +51,16 @@ TRANSLATION_LANGUAGES = {"en": "English", "de": "German", "pl": "Polish",
 # The key is the file suffix, which stays short. Where the document's real BCP-47 tag differs,
 # it is spelled out here so screen readers and spellcheckers get the right variant.
 HTML_LANG = {"es": "es-419"}
-BUNDLE_FILES = ("final_notes.md", "final_notes.html",
-                *(f"final_notes.{lang}.{ext}"
-                  for lang in TRANSLATION_LANGUAGES for ext in ("md", "html")),
-                "live_notes.md", "transcript.txt", "lecture.wav", "session.json")
+# Every file a lecture hands out, mapped to the key the page knows its link by. The download
+# links, /download and the ZIP all read this one list, so a file added here reaches all three.
+# The page's own labels map in static/app.js still has to learn the new key (#9).
+LECTURE_FILES = {
+    "lecture.wav": "audio", "transcript.txt": "transcript", "live_notes.md": "live_notes",
+    "final_notes.md": "final_notes", "final_notes.html": "final_html",
+    "session.json": "metadata",
+    **{f"final_notes.{lang}.md": f"final_{lang}" for lang in TRANSLATION_LANGUAGES},
+    **{f"final_notes.{lang}.html": f"final_{lang}_html" for lang in TRANSLATION_LANGUAGES},
+}
 
 NOTE_WINDOW_SECONDS = int(os.getenv("NOTE_WINDOW_SECONDS", "60"))
 ROLLUP_EVERY_BLOCKS = int(os.getenv("ROLLUP_EVERY_BLOCKS", "10"))
@@ -539,15 +545,6 @@ async def _finalize_session(session_id: str) -> str:
     return notes
 
 
-DOWNLOAD_LINK_KEYS = {
-    "lecture.wav": "audio", "transcript.txt": "transcript", "live_notes.md": "live_notes",
-    "final_notes.md": "final_notes", "final_notes.html": "final_html",
-    "session.json": "metadata",
-    **{f"final_notes.{lang}.md": f"final_{lang}" for lang in TRANSLATION_LANGUAGES},
-    **{f"final_notes.{lang}.html": f"final_{lang}_html" for lang in TRANSLATION_LANGUAGES},
-}
-
-
 TRANSLATION_FILES = frozenset(f"final_notes.{lang}.{ext}"
                               for lang in TRANSLATION_LANGUAGES for ext in ("md", "html"))
 
@@ -574,8 +571,8 @@ def session_files(session_id: str, names) -> list[str]:
 
 def download_links(session_id: str) -> dict[str, str]:
     """Built from the files on disk, so a copy written by a later re-run still shows up."""
-    links = {DOWNLOAD_LINK_KEYS[name]: f"/download/{session_id}/{name}"
-             for name in session_files(session_id, DOWNLOAD_LINK_KEYS)}
+    links = {LECTURE_FILES[name]: f"/download/{session_id}/{name}"
+             for name in session_files(session_id, LECTURE_FILES)}
     links["bundle"] = f"/bundle/{session_id}"
     return links
 
@@ -669,32 +666,53 @@ async def bundle(session_id: str):
     if not re.fullmatch(SESSION_ID_PATTERN, session_id):
         raise HTTPException(status_code=404)
     session_dir = session_dir_for(session_id)
-    present = session_files(session_id, BUNDLE_FILES)
-    if not present:
-        raise HTTPException(status_code=404)
 
-    # Zipped to a temp file rather than memory: an hour of lecture audio is not small.
-    archive = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
-    archive.close()
-    try:
-        with zipfile.ZipFile(archive.name, "w", zipfile.ZIP_DEFLATED) as bundled:
+    def notes_version():
+        try:
+            stat = (session_dir / "final_notes.md").stat()
+        except FileNotFoundError:
+            return None
+        return stat.st_mtime_ns, stat.st_size
+
+    def build_archive(path, present):
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as bundled:
             for name in present:
                 bundled.write(session_dir / name, arcname=name)
-    except BaseException:
+
+    # In a worker thread: deflating an hour of audio takes seconds, and on the event loop it
+    # would stall every lecture being recorded meanwhile (#8). Off the loop, a re-merge can now
+    # publish mid-zip and leave new notes beside a translation of the old ones (ADR 0006), so
+    # the zip is checked against the notes' version and rebuilt if they changed under it. A
+    # merge rewrites the notes once, so a rebuild settles; the lock is not taken, since a merge
+    # can hold it for minutes.
+    for _ in range(3):
+        version = notes_version()
+        present = session_files(session_id, LECTURE_FILES)
+        if not present:
+            raise HTTPException(status_code=404)
+        # Zipped to a temp file rather than memory: an hour of lecture audio is not small.
+        archive = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        archive.close()
+        try:
+            await asyncio.to_thread(build_archive, archive.name, present)
+        except FileNotFoundError:
+            # A stale translation was deleted mid-zip: the same re-merge, seen another way.
+            os.unlink(archive.name)
+            continue
+        except BaseException:
+            os.unlink(archive.name)
+            raise
+        if notes_version() == version:
+            return FileResponse(archive.name, media_type="application/zip",
+                                filename=bundle_filename(session_id),
+                                background=BackgroundTask(os.unlink, archive.name))
         os.unlink(archive.name)
-        raise
-    return FileResponse(archive.name, media_type="application/zip",
-                        filename=bundle_filename(session_id),
-                        background=BackgroundTask(os.unlink, archive.name))
+    raise HTTPException(status_code=503, detail="這堂課的筆記正在更新，請稍後再下載。")
 
 
 @app.get("/download/{session_id}/{filename}")
 async def download(session_id: str, filename: str):
-    allowed = {"lecture.wav", "transcript.txt", "live_notes.md", "final_notes.md",
-               "final_notes.html", "session.json"}
-    allowed |= {f"final_notes.{lang}.{ext}"
-                for lang in TRANSLATION_LANGUAGES for ext in ("md", "html")}
-    if not re.fullmatch(r"\d{8}_\d{6}", session_id) or filename not in allowed:
+    if not re.fullmatch(SESSION_ID_PATTERN, session_id) or filename not in LECTURE_FILES:
         raise HTTPException(status_code=404)
     session_dir = session_dir_for(session_id)
     path = session_dir / filename

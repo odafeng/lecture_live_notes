@@ -197,10 +197,18 @@ class WorkflowTests(unittest.TestCase):
             response = client.get(saved["files"]["bundle"])
             self.assertEqual(response.status_code, 200)
             with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
-                self.assertEqual(sorted(bundle.namelist()), sorted(app.BUNDLE_FILES))
+                # Spelled out: comparing against app.LECTURE_FILES would check the list against
+                # itself, and a file dropped from it would go unnoticed.
+                self.assertEqual(sorted(bundle.namelist()), sorted([
+                    "lecture.wav", "transcript.txt", "live_notes.md", "session.json",
+                    "final_notes.md", "final_notes.html",
+                    "final_notes.en.md", "final_notes.en.html",
+                    "final_notes.de.md", "final_notes.de.html",
+                    "final_notes.pl.md", "final_notes.pl.html",
+                    "final_notes.es.md", "final_notes.es.html"]))
                 self.assertIn("機器學習", bundle.read("final_notes.html").decode("utf-8"))
                 # Groupmates get one file, not a folder of links to chase. Each translated file
-                # is named here, so dropping one from BUNDLE_FILES cannot go unnoticed.
+                # is named here, so dropping one from LECTURE_FILES cannot go unnoticed.
                 for suffix, language in (("en", "English"), ("de", "German"),
                                          ("pl", "Polish"), ("es", "Latin American Spanish")):
                     self.assertIn(f"Notatki ({language})",
