@@ -611,18 +611,32 @@ async def finalize(session_id: str):
 async def incomplete_sessions():
     """Sessions whose final merge never succeeded, so the browser can offer a re-run."""
     sessions = []
-    for meta_path in sorted(OUTPUT_DIR.glob("*/*/session.json"), reverse=True):
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if meta.get("final_notes_status") != FINAL_STATUS_FAILED:
-            continue
-        if not (meta_path.parent / "finalize_input.json").exists():
-            continue
+    # Walked by material rather than by session.json: without the material there is nothing to
+    # re-run, and a lecture can have material but no session.json (see below).
+    for material_path in sorted(OUTPUT_DIR.glob("*/*/finalize_input.json"), reverse=True):
+        session_dir = material_path.parent
+        folder_id = f"{session_dir.parent.name}_{session_dir.name}"
+        meta_path = session_dir / "session.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if meta.get("final_notes_status") != FINAL_STATUS_FAILED:
+                continue
+        else:
+            # The wrap-up writes session.json only after the merge, so the server stopped
+            # partway through it (#7). Not while a merge of it is running here now, and not once
+            # final_notes.md exists: then a merge landed and only the metadata is missing.
+            if folder_id in _session_locks or (session_dir / "final_notes.md").exists():
+                continue
+            try:
+                material = json.loads(material_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            meta = {"course_title": material.get("course_title", ""), "started_at": folder_id}
         sessions.append({
-            "session_id": meta.get(
-                "session_id", f"{meta_path.parent.parent.name}_{meta_path.parent.name}"),
+            "session_id": meta.get("session_id", folder_id),
             "course_title": meta.get("course_title", ""),
             "started_at": meta.get("started_at", ""),
         })
