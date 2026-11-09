@@ -656,10 +656,16 @@ async def bundle(session_id: str):
     # Zipped to a temp file rather than memory: an hour of lecture audio is not small.
     archive = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
     archive.close()
-    try:
+
+    def build_archive():
         with zipfile.ZipFile(archive.name, "w", zipfile.ZIP_DEFLATED) as bundled:
             for name in present:
                 bundled.write(session_dir / name, arcname=name)
+
+    try:
+        # In a worker thread: deflating an hour of audio takes seconds, and on the event loop
+        # it would stall every lecture being recorded meanwhile (#8).
+        await asyncio.to_thread(build_archive)
     except BaseException:
         os.unlink(archive.name)
         raise

@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import runpy
 import tempfile
+import time
 import unittest
 import zipfile
 from unittest.mock import AsyncMock, call, patch
@@ -578,6 +579,38 @@ class FinalizeTests(unittest.TestCase):
             self.assertEqual(bundle.read("transcript.txt").decode("utf-8"), "內容 transcript.txt")
         # The download is named after the lecture, not the opaque session id.
         self.assertIn("20260908", response.headers["content-disposition"])
+
+    def test_building_a_bundle_leaves_the_event_loop_free(self):
+        """#8: zipping on the loop froze every lecture being recorded while it ran."""
+        self.write_session()
+        real_write = zipfile.ZipFile.write
+
+        def slow_write(archive, *args, **kwargs):
+            time.sleep(0.2)  # stands in for deflating an hour of audio
+            return real_write(archive, *args, **kwargs)
+
+        async def scenario():
+            ticks = 0
+
+            async def tick():
+                nonlocal ticks
+                while True:
+                    ticks += 1
+                    await asyncio.sleep(0.01)
+
+            ticker = asyncio.create_task(tick())
+            await asyncio.sleep(0.01)
+            before = ticks
+            response = await app.bundle(self.SESSION)
+            during = ticks - before
+            ticker.cancel()
+            os.unlink(response.path)  # its BackgroundTask cleanup never runs outside a request
+            return during
+
+        with patch.object(zipfile.ZipFile, "write", slow_write):
+            during = asyncio.run(scenario())
+        # Two files at 0.2 s each: a free loop ticks dozens of times, a blocked one not at all.
+        self.assertGreater(during, 5)
 
     def test_bundle_skips_files_the_lecture_never_wrote(self):
         self.write_session()
