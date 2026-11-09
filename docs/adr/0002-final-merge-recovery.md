@@ -30,6 +30,8 @@ Accepted（2026-09-08）
 現在改由 `finalize_input.json` 出發：沒有 `session.json` 的資料夾，只要 `final_notes.md` 還不存在、
 且不是目前正在整併中（`_session_locks` 裡沒有它），也會列出。這種課重新整併成功後仍然沒有
 `session.json`，靠 `final_notes.md` 已存在來停止提示；下載檔名因此會退回 `lecture_<id>.zip`。
+仍未涵蓋的情況：server 在**翻譯**途中停掉。這時 `final_notes.md` 已經寫好，不會被提示，但部分
+譯本缺漏（不會交出舊的，`is_current` 會擋）。補救只能按「重新整併」，代價是整份重跑一次。
 
 前端在完整筆記面板也常駐一顆「重新整併」按鈕，成功的課也能按。重跑一次的成本很低，而筆記品質不滿意想重生成是合理需求。
 
