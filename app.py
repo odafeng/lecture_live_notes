@@ -51,10 +51,16 @@ TRANSLATION_LANGUAGES = {"en": "English", "de": "German", "pl": "Polish",
 # The key is the file suffix, which stays short. Where the document's real BCP-47 tag differs,
 # it is spelled out here so screen readers and spellcheckers get the right variant.
 HTML_LANG = {"es": "es-419"}
-BUNDLE_FILES = ("final_notes.md", "final_notes.html",
-                *(f"final_notes.{lang}.{ext}"
-                  for lang in TRANSLATION_LANGUAGES for ext in ("md", "html")),
-                "live_notes.md", "transcript.txt", "lecture.wav", "session.json")
+# Every file a lecture hands out, mapped to the key the page knows its link by. The download
+# links, /download and the ZIP all read this one list, so a file added here reaches all three.
+# The page's own labels map in static/app.js still has to learn the new key (#9).
+LECTURE_FILES = {
+    "lecture.wav": "audio", "transcript.txt": "transcript", "live_notes.md": "live_notes",
+    "final_notes.md": "final_notes", "final_notes.html": "final_html",
+    "session.json": "metadata",
+    **{f"final_notes.{lang}.md": f"final_{lang}" for lang in TRANSLATION_LANGUAGES},
+    **{f"final_notes.{lang}.html": f"final_{lang}_html" for lang in TRANSLATION_LANGUAGES},
+}
 
 NOTE_WINDOW_SECONDS = int(os.getenv("NOTE_WINDOW_SECONDS", "60"))
 ROLLUP_EVERY_BLOCKS = int(os.getenv("ROLLUP_EVERY_BLOCKS", "10"))
@@ -533,15 +539,6 @@ async def _finalize_session(session_id: str) -> str:
     return notes
 
 
-DOWNLOAD_LINK_KEYS = {
-    "lecture.wav": "audio", "transcript.txt": "transcript", "live_notes.md": "live_notes",
-    "final_notes.md": "final_notes", "final_notes.html": "final_html",
-    "session.json": "metadata",
-    **{f"final_notes.{lang}.md": f"final_{lang}" for lang in TRANSLATION_LANGUAGES},
-    **{f"final_notes.{lang}.html": f"final_{lang}_html" for lang in TRANSLATION_LANGUAGES},
-}
-
-
 TRANSLATION_FILES = frozenset(f"final_notes.{lang}.{ext}"
                               for lang in TRANSLATION_LANGUAGES for ext in ("md", "html"))
 
@@ -568,8 +565,8 @@ def session_files(session_id: str, names) -> list[str]:
 
 def download_links(session_id: str) -> dict[str, str]:
     """Built from the files on disk, so a copy written by a later re-run still shows up."""
-    links = {DOWNLOAD_LINK_KEYS[name]: f"/download/{session_id}/{name}"
-             for name in session_files(session_id, DOWNLOAD_LINK_KEYS)}
+    links = {LECTURE_FILES[name]: f"/download/{session_id}/{name}"
+             for name in session_files(session_id, LECTURE_FILES)}
     links["bundle"] = f"/bundle/{session_id}"
     return links
 
@@ -670,7 +667,7 @@ async def bundle(session_id: str):
     # can hold it for minutes.
     for _ in range(3):
         version = notes_version()
-        present = session_files(session_id, BUNDLE_FILES)
+        present = session_files(session_id, LECTURE_FILES)
         if not present:
             raise HTTPException(status_code=404)
         # Zipped to a temp file rather than memory: an hour of lecture audio is not small.
@@ -695,11 +692,7 @@ async def bundle(session_id: str):
 
 @app.get("/download/{session_id}/{filename}")
 async def download(session_id: str, filename: str):
-    allowed = {"lecture.wav", "transcript.txt", "live_notes.md", "final_notes.md",
-               "final_notes.html", "session.json"}
-    allowed |= {f"final_notes.{lang}.{ext}"
-                for lang in TRANSLATION_LANGUAGES for ext in ("md", "html")}
-    if not re.fullmatch(r"\d{8}_\d{6}", session_id) or filename not in allowed:
+    if not re.fullmatch(SESSION_ID_PATTERN, session_id) or filename not in LECTURE_FILES:
         raise HTTPException(status_code=404)
     session_dir = session_dir_for(session_id)
     path = session_dir / filename

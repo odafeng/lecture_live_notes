@@ -567,7 +567,7 @@ class FinalizeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "application/zip")
         with zipfile.ZipFile(io.BytesIO(response.content)) as bundle:
-            # Spelled out rather than compared against BUNDLE_FILES: the constant defines the
+            # Spelled out rather than compared against LECTURE_FILES: the constant defines the
             # zip, so checking one against the other passes even when a file goes missing.
             self.assertEqual(sorted(bundle.namelist()), sorted([
                 "lecture.wav", "transcript.txt", "live_notes.md", "session.json",
@@ -695,6 +695,21 @@ class FinalizeTests(unittest.TestCase):
         with TestClient(app.app) as client:
             self.assertEqual(client.get("/bundle/not-a-session").status_code, 404)
             self.assertEqual(client.get("/bundle/20260101_000000").status_code, 404)
+
+    def test_one_list_decides_what_a_lecture_hands_out(self):
+        """#9: the ZIP, the links and /download each kept their own copy of the file list."""
+        self.write_session()
+        (self.session_dir / "slides.pdf").write_bytes(b"%PDF-1.7")
+        extended = {**app.LECTURE_FILES, "slides.pdf": "slides"}
+        with patch.object(app, "LECTURE_FILES", extended), TestClient(app.app) as client:
+            links = app.download_links(self.SESSION)
+            served = client.get(f"/download/{self.SESSION}/slides.pdf")
+            bundled = client.get(f"/bundle/{self.SESSION}")
+
+        self.assertEqual(links.get("slides"), f"/download/{self.SESSION}/slides.pdf")
+        self.assertEqual(served.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(bundled.content)) as bundle:
+            self.assertIn("slides.pdf", bundle.namelist())
 
     def test_a_day_gets_one_folder_holding_each_recording(self):
         self.write_session()
