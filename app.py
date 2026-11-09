@@ -70,8 +70,8 @@ GEMINI_PING_TIMEOUT_SECONDS = int(os.getenv("GEMINI_PING_TIMEOUT_SECONDS", "60")
 LIVE_RETRY_DELAYS = (2, 4, 8)
 FINAL_RETRY_DELAYS = (5, 15, 45, 120)
 BACKGROUND_RETRY_DELAYS = (60, 300, 900)
-# Pauses between Gemini Live reconnects. One consecutive failure more than this gives up on ASR;
-# the recording itself carries on.
+# Pauses between Gemini Live reconnects. ASR gives up after len(ASR_RETRY_DELAYS) + 1
+# consecutive failures; the recording itself carries on.
 ASR_RETRY_DELAYS = (1.5, 3, 4.5, 6)
 # Audio waiting for Gemini while a connection rotates or reconnects: ~85 ms a chunk, so ~42 s.
 AUDIO_QUEUE_CHUNKS = 500
@@ -759,6 +759,10 @@ async def websocket_endpoint(ws: WebSocket):
     wav_file.setnchannels(1)
     wav_file.setsampwidth(BYTES_PER_SAMPLE)
     wav_file.setframerate(SAMPLE_RATE)
+    # Header out now, sized zero. writeframes patches the header (and its seek flushes the file)
+    # only when the length on record is wrong; left to the first chunk, the header would be
+    # sized to that chunk, so the first chunk alone would sit unflushed and unreadable (#11).
+    wav_file.writeframes(b"")
 
     audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=AUDIO_QUEUE_CHUNKS)
     transcript_queue: asyncio.Queue[tuple[str, float] | None] = asyncio.Queue()
@@ -1063,10 +1067,11 @@ async def websocket_endpoint(ws: WebSocket):
             if message.get("bytes") is not None:
                 data = message["bytes"]
                 # writeframes, not writeframesraw: it rewrites the header's length after every
-                # chunk, and the seek that takes flushes the buffer, so a server that stops
-                # mid-lecture leaves a WAV that plays to within one chunk of where it stopped.
+                # chunk, and the seek that takes flushes Python's buffer to the OS, so a server
+                # process that dies mid-lecture leaves a WAV that plays up to its last chunk.
+                # (No fsync: a power cut can still lose what the OS had not written out.)
                 # writeframesraw left the header at the first chunk and up to 128 KiB (~4 s) in
-                # memory until close() (#11).
+                # Python's memory until close() (#11).
                 wav_file.writeframes(data)
                 async with state_lock:
                     audio_bytes_received += len(data)

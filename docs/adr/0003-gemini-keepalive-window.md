@@ -31,7 +31,9 @@ websockets.exceptions.ConnectionClosedError: sent 1011 (internal error) keepaliv
 補記（#11）：原本用的是 `writeframesraw`，它不更新 WAV 檔頭，資料也留在 Python 的寫入緩衝區
 （3.14 預設 128 KiB，約 4 秒音訊）直到 `close()`。server 在下課前停掉時，硬碟上的檔案讀不出來，
 「錄音仍然完整」只在正常收尾時成立。改用 `writeframes` 後，每包都會改寫檔頭長度，改寫時的
-seek 會把緩衝區寫到硬碟。實測一小時約多花 0.4 秒。
+seek 會把 Python 的緩衝區交給作業系統。開檔時先寫一個空 frame，讓檔頭以長度 0 先落地，
+否則第一包的長度剛好等於檔頭記的長度、不會觸發改寫，第一包仍會留在記憶體裡。實測一小時約多花
+0.4 秒。保證的範圍是 server 程序中途結束；沒有 `fsync`，斷電時作業系統還沒寫出的部分仍可能遺失。
 
 `audio_queue` 的 maxsize 500 約等於 42 秒緩衝，重連 backoff 最多 6 秒，所以重連期間的音訊不會掉。但若斷線超過 42 秒，`audio_queue.put()` 會阻塞接收迴圈，連帶讓 wav 寫入落後。
 
