@@ -2,13 +2,18 @@
 
 import asyncio
 import json
+import socket
 import tempfile
+import time
 import unittest
 import wave
 from unittest.mock import patch
 
+from websockets.exceptions import ConnectionClosedError
+from websockets.frames import Close
+
 import app
-from tests.fakes import fake_services
+from tests.fakes import FakeGeminiSocket, fake_services
 
 CHUNK = b"\x01\x00" * 1365  # ~85 ms of 16 kHz PCM, the size the browser sends
 FRAMES_PER_CHUNK = len(CHUNK) // app.BYTES_PER_SAMPLE
@@ -72,25 +77,22 @@ class RecordingTests(unittest.TestCase):
         """#10: the receive loop was parked in put() on a queue nobody would ever drain again."""
 
         async def scenario():
-            third_chunk_taken = asyncio.Event()
-            taken = 0
+            async def refused(*_args, **_kwargs):
+                # Only a refusal gives up: Gemini closing on us with a reason. A network error
+                # alone keeps retrying for the rest of the class.
+                raise ConnectionClosedError(Close(1008, "API key not valid"), None)
 
-            async def watch(message):
-                nonlocal taken
-                if message is not None and "bytes" in message:
-                    taken += 1
-                    if taken == 3:
-                        third_chunk_taken.set()
+            async def hold_stop_until_given_up(message):
+                if message == stop():
+                    deadline = time.monotonic() + 5
+                    while (not any(m["type"] == "error" for m in browser.sent)
+                           and time.monotonic() < deadline):
+                        await asyncio.sleep(0.01)
 
-            async def unreachable(*_args, **_kwargs):
-                # Hold every attempt until the queue (two chunks) is full and the receive loop
-                # is waiting in put() for the third, then fail like a connect that timed out.
-                await third_chunk_taken.wait()
-                await asyncio.sleep(0.05)
-                raise ConnectionError("Gemini Live unreachable")
-
-            browser = FakeBrowser([meta(), audio(), audio(), audio(), stop()], on_receive=watch)
-            with patch.object(app.websockets, "connect", unreachable):
+            # Three chunks for a queue of two that nobody takes from.
+            browser = FakeBrowser([meta(), audio(), audio(), audio(), stop()],
+                                  on_receive=hold_stop_until_given_up)
+            with patch.object(app.websockets, "connect", refused):
                 await asyncio.wait_for(app.websocket_endpoint(browser), timeout=10)
             return browser
 
@@ -111,6 +113,67 @@ class RecordingTests(unittest.TestCase):
             [final] = [m for m in browser.sent if m["type"] == "final"]
             self.assertEqual(final["status"], app.FINAL_STATUS_EMPTY)
             self.assertIn("錄音已保存", final["text"])
+
+    def test_transcription_comes_back_after_the_network_does(self):
+        """The Mac losing its connection for longer than a few retries ended transcription for
+        the rest of the class: offline, every connect fails at once on DNS, so the five attempts
+        were spent in about 15 seconds and the worker never tried again."""
+
+        async def scenario():
+            attempts = 0
+
+            async def offline_then_back(*_args, **_kwargs):
+                nonlocal attempts
+                attempts += 1
+                if attempts <= 2 * (len(app.ASR_RETRY_DELAYS) + 1):
+                    raise socket.gaierror(8, "nodename nor servname provided, or not known")
+                return FakeGeminiSocket()
+
+            async def hold_stop_until_transcribed(message):
+                if message == stop():
+                    deadline = time.monotonic() + 5
+                    while (not any(m["type"] == "transcript" for m in browser.sent)
+                           and time.monotonic() < deadline):
+                        await asyncio.sleep(0.01)
+
+            browser = FakeBrowser([meta(), audio(), audio(), stop()],
+                                  on_receive=hold_stop_until_transcribed)
+            with patch.object(app.websockets, "connect", offline_then_back):
+                await asyncio.wait_for(app.websocket_endpoint(browser), timeout=10)
+            return browser
+
+        with tempfile.TemporaryDirectory() as output, fake_services(output), \
+                patch.object(app, "ASR_RETRY_DELAYS", (0, 0, 0, 0)):
+            browser = asyncio.run(scenario())
+
+            kinds = [message["type"] for message in browser.sent]
+            self.assertIn("transcript", kinds)
+            self.assertNotIn("error", kinds)
+            # One notice per outage, not one per attempt: each lands in the notes panel.
+            self.assertEqual(kinds.count("asr_error"), 1, kinds)
+
+    def test_stopping_while_offline_wraps_up_without_waiting_out_the_retries(self):
+        """With the network gone for good, the receive loop must keep writing the recording
+        past a full queue, and stop must not wait for a reconnect that cannot happen."""
+
+        async def offline(*_args, **_kwargs):
+            raise socket.gaierror(8, "nodename nor servname provided, or not known")
+
+        async def scenario():
+            browser = FakeBrowser([meta(), *[audio() for _ in range(5)], stop()])
+            with patch.object(app.websockets, "connect", offline):
+                started = time.monotonic()
+                await asyncio.wait_for(app.websocket_endpoint(browser), timeout=10)
+                return browser, time.monotonic() - started
+
+        with tempfile.TemporaryDirectory() as output, fake_services(output), \
+                patch.object(app, "AUDIO_QUEUE_CHUNKS", 2), \
+                patch.object(app, "ASR_RETRY_DELAYS", (5,)):
+            browser, took = asyncio.run(scenario())
+
+            self.assertLess(took, 3)
+            self.assertEqual(recorded_frames(), 5 * FRAMES_PER_CHUNK)
+            self.assertIn("saved", [message["type"] for message in browser.sent])
 
     def test_an_unclosed_recording_already_says_how_long_it_is(self):
         """#11: a server that stopped before close() left a WAV that could not be read."""

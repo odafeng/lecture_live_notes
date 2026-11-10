@@ -76,10 +76,12 @@ GEMINI_PING_TIMEOUT_SECONDS = int(os.getenv("GEMINI_PING_TIMEOUT_SECONDS", "60")
 LIVE_RETRY_DELAYS = (2, 4, 8)
 FINAL_RETRY_DELAYS = (5, 15, 45, 120)
 BACKGROUND_RETRY_DELAYS = (60, 300, 900)
-# Pauses between Gemini Live reconnects. ASR gives up after len(ASR_RETRY_DELAYS) + 1
-# consecutive failures; the recording itself carries on.
+# Pauses between Gemini Live reconnects; a network outage keeps retrying at the last one until
+# class ends. Only Gemini refusing us gives up, after len(ASR_RETRY_DELAYS) + 1 refusals in a row;
+# the recording itself carries on either way (ADR 0009).
 ASR_RETRY_DELAYS = (1.5, 3, 4.5, 6)
 # Audio waiting for Gemini while a connection rotates or reconnects: ~85 ms a chunk, so ~42 s.
+# A longer wait drops the oldest chunks from the queue; lecture.wav still has them.
 AUDIO_QUEUE_CHUNKS = 500
 # Responses are streamed, so `read` bounds the gap between chunks rather than the whole generation.
 STREAM_TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=60.0, pool=30.0)
@@ -735,6 +737,17 @@ async def health():
     }
 
 
+def is_network_failure(error: BaseException) -> bool:
+    """True when Gemini never told us no: the network dropped, stalled or could not resolve.
+
+    A refusal (a bad key or model) arrives as a close frame with a reason, and retrying it for
+    the rest of the class would only repeat it.
+    """
+    if isinstance(error, websockets.ConnectionClosed):
+        return error.rcvd is None
+    return isinstance(error, (OSError, TimeoutError))
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
@@ -800,6 +813,15 @@ async def websocket_endpoint(ws: WebSocket):
     audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=AUDIO_QUEUE_CHUNKS)
     transcript_queue: asyncio.Queue[tuple[str, float] | None] = asyncio.Queue()
     asr_failed = asyncio.Event()
+    class_over = asyncio.Event()
+
+    def enqueue_audio(item: bytes | None):
+        # Never waits: a receive loop parked on a full queue stops writing lecture.wav and never
+        # reads stop (#10). An outage longer than the queue loses the oldest audio from the
+        # transcript only.
+        if audio_queue.full():
+            audio_queue.get_nowait()
+        audio_queue.put_nowait(item)
 
     audio_bytes_received = 0
     state_lock = asyncio.Lock()
@@ -884,7 +906,8 @@ async def websocket_endpoint(ws: WebSocket):
         url = f"{GEMINI_WS_URL}?key={GEMINI_API_KEY}"
         carry_chunk: bytes | None = None
         stop_requested = False
-        failures = 0
+        failures = 0  # refusals in a row: these give up
+        outage = 0  # network failures in a row: these never do
         session_number = 0
 
         while not stop_requested:
@@ -915,7 +938,7 @@ async def websocket_endpoint(ws: WebSocket):
                 }
                 await gemini_ws.send(json.dumps(setup_message))
                 await wait_for_setup(gemini_ws)
-                failures = 0
+                failures = outage = 0
 
                 await safe_send({
                     "type": "asr_session",
@@ -990,24 +1013,33 @@ async def websocket_endpoint(ws: WebSocket):
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                failures += 1
-                await safe_send({
-                    "type": "asr_error",
-                    "text": f"Gemini Live 連線錯誤：{type(e).__name__}: {e}",
-                })
+                network = is_network_failure(e)
+                if network:
+                    outage += 1
+                else:
+                    failures += 1
+                attempt = outage if network else failures
+                # Once per outage: each notice also lands in the notes panel.
+                if not network or outage == 1:
+                    await safe_send({
+                        "type": "asr_error",
+                        "text": f"Gemini Live 連線錯誤：{type(e).__name__}: {e}",
+                    })
                 if failures > len(ASR_RETRY_DELAYS):
                     asr_failed.set()
-                    # The receive loop may already be parked in put() on a full queue, and nothing
-                    # will take from it again. Emptying it lets that put() return; from then on the
-                    # loop sees asr_failed and stops feeding the queue. The WAV already has it all.
-                    while not audio_queue.empty():
-                        audio_queue.get_nowait()
                     await safe_send({
                         "type": "error",
                         "text": f"Gemini Live 連續連線失敗 {failures} 次。錄音仍會保存，但本堂課不再產生即時逐字稿。",
                     })
                     return
-                await asyncio.sleep(ASR_RETRY_DELAYS[failures - 1])
+                # Class ended and this was the one attempt left to send what is buffered.
+                if class_over.is_set():
+                    return
+                delay = ASR_RETRY_DELAYS[min(attempt, len(ASR_RETRY_DELAYS)) - 1]
+                try:
+                    await asyncio.wait_for(class_over.wait(), timeout=delay)
+                except asyncio.TimeoutError:
+                    pass
             finally:
                 if receiver_task:
                     if not receiver_task.done():
@@ -1110,7 +1142,7 @@ async def websocket_endpoint(ws: WebSocket):
                     audio_bytes_received += len(data)
 
                 if not asr_failed.is_set():
-                    await audio_queue.put(data)
+                    enqueue_audio(data)
 
             elif message.get("text") is not None:
                 try:
@@ -1149,8 +1181,9 @@ async def websocket_endpoint(ws: WebSocket):
         stopped = True
     finally:
         # End ASR and wait for final transcript events before closing the note worker.
+        class_over.set()
         if not asr_failed.is_set():
-            await audio_queue.put(None)
+            enqueue_audio(None)
         else:
             if not asr_task.done():
                 asr_task.cancel()
