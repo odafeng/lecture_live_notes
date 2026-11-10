@@ -739,7 +739,7 @@ class FinalizeTests(unittest.TestCase):
 
     def test_incomplete_offers_a_merge_the_server_never_finished(self):
         """#7: the server stopped between finalize_input.json and session.json."""
-        def interrupted(session_id, merged=False):
+        def interrupted(session_id, merged=False, translated=()):
             date, clock = session_id.split("_")
             directory = self.output / date / clock
             directory.mkdir(parents=True, exist_ok=True)
@@ -748,17 +748,52 @@ class FinalizeTests(unittest.TestCase):
                 ensure_ascii=False), encoding="utf-8")
             if merged:
                 (directory / "final_notes.md").write_text("# 統計\n", encoding="utf-8")
+            for lang in translated:  # written after the notes, as publish_final_notes does
+                for ext in ("md", "html"):
+                    (directory / f"final_notes.{lang}.{ext}").write_text("x", encoding="utf-8")
 
+        every_language = tuple(app.TRANSLATION_LANGUAGES)
         interrupted(self.SESSION)
-        interrupted("20260908_100000", merged=True)  # its merge landed; only the metadata is missing
+        # Merged and translated in full; only the metadata is missing.
+        interrupted("20260908_100000", merged=True, translated=every_language)
         interrupted("20260908_110000")
+        # #13: merged, then the server stopped partway through the translations.
+        interrupted("20260908_120000", merged=True, translated=("en",))
         with patch.dict(app._session_locks, {"20260908_110000": (asyncio.Lock(), 1)}), \
                 TestClient(app.app) as client:
             # 11:00 is still merging right now, so offering it would only queue a second merge.
             sessions = client.get("/sessions/incomplete").json()["sessions"]
 
-        self.assertEqual(sessions, [{"session_id": self.SESSION, "course_title": "統計",
-                                     "started_at": self.SESSION}])
+        self.assertEqual(sessions, [
+            {"session_id": "20260908_120000", "course_title": "統計", "started_at": "20260908_120000"},
+            {"session_id": self.SESSION, "course_title": "統計", "started_at": self.SESSION}])
+
+    def test_a_rerun_without_metadata_settles_the_lecture(self):
+        """Review of #13: a re-merge of a folder without session.json left none behind, so one
+        translation that failed during it kept the lecture offered, and billed, on every visit."""
+        (self.session_dir / "finalize_input.json").write_text(json.dumps(
+            {"course_title": "統計", "chapters": "", "remaining": "### 一段"},
+            ensure_ascii=False), encoding="utf-8")
+        real_client = httpx.AsyncClient
+
+        def respond(request):
+            prompt = json.loads(request.content)["contents"][0]["parts"][0]["text"]
+            if prompt.startswith("Translate the lecture notes"):
+                if translation_target(prompt) == "German":
+                    return httpx.Response(400)  # permanent, so it fails without retrying
+                return stream_response(["# Notes"])
+            return stream_response(["# 統計\n\n## 本堂課總覽\n\n- 一段"])
+
+        with patch.object(app.httpx, "AsyncClient", side_effect=lambda **kw: real_client(
+                transport=httpx.MockTransport(respond), **kw)), TestClient(app.app) as client:
+            self.assertEqual(client.post(f"/finalize/{self.SESSION}").status_code, 200)
+            offered = client.get("/sessions/incomplete").json()["sessions"]
+
+        self.assertEqual(offered, [])
+        self.assertFalse((self.session_dir / "final_notes.de.md").exists())
+        meta = self.status()
+        self.assertEqual(meta["final_notes_status"], app.FINAL_STATUS_OK)
+        self.assertEqual(meta["course_title"], "統計")
 
 class BackgroundFinalizeTests(unittest.IsolatedAsyncioTestCase):
     @contextmanager

@@ -472,11 +472,18 @@ def final_status_of(session_id: str) -> str | None:
     return meta.get("final_notes_status")
 
 
-def set_final_status(session_id: str, status: str) -> None:
+def set_final_status(session_id: str, status: str, course_title: str = "") -> None:
     """Record whether final_notes.md holds a real merge or the raw fallback."""
     meta_path = session_paths(session_id)["meta"]
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        # The server stopped before the wrap-up wrote one (#7, #13). Start it here, so from now
+        # on the lecture is judged by its status. Without it, a translation that fails during
+        # this re-merge looks like the crash again, and the lecture stays on offer, and billed,
+        # on every visit.
+        meta = {"session_id": session_id, "course_title": course_title,
+                "started_at": session_id}
     except (OSError, json.JSONDecodeError):
         return
     meta["final_notes_status"] = status
@@ -543,7 +550,7 @@ async def _finalize_session(session_id: str) -> str:
     # The copies on disk translate the notes this run just replaced, so they are refreshed too.
     notes, _ = await publish_final_notes(session_id, paths, course_title, notes,
                                          FINAL_STATUS_OK)
-    set_final_status(session_id, FINAL_STATUS_OK)
+    set_final_status(session_id, FINAL_STATUS_OK, course_title)
     return notes
 
 
@@ -630,10 +637,16 @@ async def incomplete_sessions():
             if meta.get("final_notes_status") != FINAL_STATUS_FAILED:
                 continue
         else:
-            # The wrap-up writes session.json only after the merge, so the server stopped
-            # partway through it (#7). Not while a merge of it is running here now, and not once
-            # final_notes.md exists: then a merge landed and only the metadata is missing.
-            if folder_id in _session_locks or (session_dir / "final_notes.md").exists():
+            # The wrap-up writes session.json only after the merge and its translations, so the
+            # server stopped partway through them (#7). Not while a merge of it is running here
+            # now, and not once the notes and every translation are on disk: then only the
+            # metadata is missing. Notes without all their translations mean it stopped while
+            # translating (#13); a re-merge redoes both, paying for a merge rather than adding a
+            # translate-only path for a rare crash.
+            if folder_id in _session_locks:
+                continue
+            if ((session_dir / "final_notes.md").exists()
+                    and len(session_files(folder_id, TRANSLATION_FILES)) == len(TRANSLATION_FILES)):
                 continue
             try:
                 material = json.loads(material_path.read_text(encoding="utf-8"))
