@@ -1,2 +1,5 @@
 -r requirements.txt
 playwright
+# Starlette's TestClient runs on httpx2; with only httpx it falls back with a deprecation
+# warning, and a later release drops the fallback (#19). The app itself still uses httpx.
+httpx2
